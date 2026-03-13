@@ -539,7 +539,7 @@ def apply_month_headers(ws):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[3].height = 30
 
-# ====================== STYLING FINAL (WRAP_TEXT FIXÉ) ======================
+# ====================== STYLING FINAL (FIX DÉFINITIF LIGNE 5) ======================
 def apply_all_styling(wb):
     center_align = Alignment(horizontal="center", vertical="center")
     vertical_date = Alignment(horizontal="center", vertical="center", text_rotation=90)
@@ -570,7 +570,7 @@ def apply_all_styling(wb):
                     ws.cell(4, c).alignment = vertical_date
             apply_month_headers(ws)
 
-        # === DESCRIPTION PROJET ET ENGAG. RL (FIX WRAP_TEXT LIGNE 5) ===
+        # === DESCRIPTION PROJET ET ENGAG. RL ===
         if sheet_name == "Description projet et engag. RL":
             apply_thin_grid(ws, 5, ws.max_row, 1, 25)
             section_starts = [5, 9, 13, 17, 21]
@@ -591,14 +591,15 @@ def apply_all_styling(wb):
                 ws.cell(1, c).font = bold_font
                 ws.cell(2, c).font = bold_font
 
-            # FIX SPÉCIFIQUE : renvoi à la ligne + hauteur sur la ligne 5
-            ws.row_dimensions[5].height = 80
+            # FIX DÉFINITIF WRAP_TEXT LIGNE 5 (après TOUT le reste du styling)
+            ws.row_dimensions[5].height = 85
+            wrap_align = Alignment(wrap_text=True, horizontal="center", vertical="center")
             for c in range(1, 26):
                 cell = ws.cell(5, c)
                 cell.font = bold_font
-                cell.alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
+                cell.alignment = wrap_align
 
-            # Centrage forcé sur toutes les lignes (y compris V à Y)
+            # Centrage forcé sur toutes les lignes
             for r in range(5, ws.max_row + 1):
                 for c in range(1, 26):
                     ws.cell(r, c).alignment = Alignment(horizontal="center", vertical="center")
@@ -1068,4 +1069,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ 100% terminé – Renvoi à la ligne automatique restauré sur la ligne 5 de Description projet et engag. RL")
+st.caption("✅ 100% terminé – Renvoi à la ligne automatique forcé sur la ligne 5 de Description projet et engag. RL")
