@@ -71,6 +71,7 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.role = None
     st.session_state.email = None
+    st.session_state.temp_password = False
 
 if not st.session_state.logged_in:
     st.title("🔐 Connexion - Gestion Contrats RL/NT")
@@ -82,12 +83,38 @@ if not st.session_state.logged_in:
             st.session_state.logged_in = True
             st.session_state.role = users[email]["role"]
             st.session_state.email = email
+            st.session_state.temp_password = password.startswith("temp")
             if email != ADMIN_EMAIL:
                 notify_admin(f"{email} ({users[email]['role']}) connecté")
             st.rerun()
         else:
             st.error("❌ Identifiants incorrects")
     st.stop()
+
+# ====================== CHANGER MOT DE PASSE ======================
+if st.session_state.temp_password:
+    st.warning("⚠️ Vous devez changer votre mot de passe temporaire avant de continuer.")
+
+st.subheader("🔑 Changer mon mot de passe")
+with st.form("change_password_form"):
+    old_pw = st.text_input("Ancien mot de passe", type="password")
+    new_pw = st.text_input("Nouveau mot de passe", type="password")
+    confirm_pw = st.text_input("Confirmer le nouveau mot de passe", type="password")
+    submitted = st.form_submit_button("Changer mon mot de passe")
+    if submitted:
+        users = load_users()
+        current_user = users[st.session_state.email]
+        if hash_password(old_pw) == current_user["password"]:
+            if new_pw == confirm_pw and len(new_pw) >= 6:
+                current_user["password"] = hash_password(new_pw)
+                save_users(users)
+                st.session_state.temp_password = False
+                st.success("✅ Mot de passe changé avec succès !")
+                st.rerun()
+            else:
+                st.error("❌ Les deux nouveaux mots de passe ne correspondent pas ou sont trop courts.")
+        else:
+            st.error("❌ Ancien mot de passe incorrect.")
 
 # ====================== ADMIN PANEL ======================
 if st.session_state.role == "Admin":
@@ -113,7 +140,6 @@ def can_access_capacity_nt():
 def can_access_engagement_rl():
     return st.session_state.role in ["RL", "Admin"]
 
-# ====================== TON CODE ORIGINAL COMPLET (identique à ta version) ======================
 # ====================== MOIS EN FRANÇAIS ======================
 FRENCH_MONTHS = {
     1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
@@ -122,39 +148,28 @@ FRENCH_MONTHS = {
 }
 
 def safe_float(val):
-    if val is None:
-        return 0.0
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return 0.0
+    if val is None: return 0.0
+    try: return float(val)
+    except: return 0.0
 
 def get_previous_monday():
     today = datetime.today().date()
     return today - timedelta(days=today.weekday())
 
 def normalize_date(d):
-    if isinstance(d, datetime):
-        return d.date()
-    elif isinstance(d, date):
-        return d
+    if isinstance(d, datetime): return d.date()
+    elif isinstance(d, date): return d
     elif isinstance(d, (int, float)) and d > 40000:
-        try:
-            return (datetime(1899, 12, 30) + timedelta(days=int(d))).date()
-        except:
-            return None
+        try: return (datetime(1899, 12, 30) + timedelta(days=int(d))).date()
+        except: return None
     elif isinstance(d, str):
-        try:
-            return datetime.strptime(d[:10], "%Y-%m-%d").date()
-        except:
-            return None
+        try: return datetime.strptime(d[:10], "%Y-%m-%d").date()
+        except: return None
     return None
 
 def get_monday_of_week(selected_date):
-    if isinstance(selected_date, datetime):
-        d = selected_date.date()
-    else:
-        d = selected_date
+    if isinstance(selected_date, datetime): d = selected_date.date()
+    else: d = selected_date
     return d - timedelta(days=d.weekday())
 
 def find_project_row(ws, project_name, start_row=3):
@@ -195,8 +210,7 @@ def find_last_filled_column(ws_cal, proj_row, before_col):
     return None
 
 def backfill_intermediate_weeks(ws_cal, proj_row, last_col, new_col):
-    if not last_col or new_col <= last_col + 1:
-        return
+    if not last_col or new_col <= last_col + 1: return
     for c in range(last_col + 1, new_col):
         for offset in range(1, 10):
             ws_cal.cell(proj_row + offset, c, ws_cal.cell(proj_row + offset, last_col).value)
@@ -326,8 +340,7 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
     soumission = []
     for proj in projects:
         status = status_dict[proj]
-        if status == "Abandonné":
-            continue
+        if status == "Abandonné": continue
         display_name = get_display_name(proj, status)
         if status == "Contrat obtenu":
             obtained.append((proj, display_name))
@@ -427,8 +440,7 @@ def rebuild_calendrier_sheet(ws_cal, ws_desc, projects):
     project_start_rows = []
     for proj in projects:
         status = get_project_status(ws_desc, proj)
-        if status == "Abandonné":
-            continue
+        if status == "Abandonné": continue
         ws_cal.cell(current_row, 1, proj)
         ws_cal.cell(current_row + 1, 1, "Dortoir RL")
         ws_cal.cell(current_row + 2, 1, "Bureau RL")
@@ -443,9 +455,7 @@ def rebuild_calendrier_sheet(ws_cal, ws_desc, projects):
         current_row += 11
     total_row = current_row + 1
     ws_cal.cell(total_row, 1, "TOTAL")
-    labels = ["Dortoir RL", "Bureau RL", "Vaste RL", "Total RL",
-              "Dortoir NT", "Bureau NT", "Vaste NT", "Total NT",
-              "Total Module RL projet TOTAL"]
+    labels = ["Dortoir RL", "Bureau RL", "Vaste RL", "Total RL", "Dortoir NT", "Bureau NT", "Vaste NT", "Total NT", "Total Module RL projet TOTAL"]
     for i, lbl in enumerate(labels):
         ws_cal.cell(total_row + i + 1, 1, lbl)
     last_col = find_last_used_column(ws_cal)
@@ -472,7 +482,7 @@ def rebuild_calendrier_sheet(ws_cal, ws_desc, projects):
         ws_cal.cell(total_row + 8, c, total_nt)
         ws_cal.cell(total_row + 9, c, total_module)
 
-# ====================== GRILLE FINE ======================
+# ====================== GRILLE FINE + STYLING ======================
 def apply_thin_grid(ws, min_row, max_row, min_col, max_col):
     thin_side = Side(style="thin", color="000000")
     thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
@@ -483,16 +493,10 @@ def apply_thin_grid(ws, min_row, max_row, min_col, max_col):
 def create_combined_border(top_thick=False, bottom_thick=False):
     thin_side = Side(style="thin", color="000000")
     thick_side = Side(style="thick", color="000000")
-    return Border(
-        left=thin_side,
-        right=thin_side,
-        top=thick_side if top_thick else thin_side,
-        bottom=thick_side if bottom_thick else thin_side
-    )
+    return Border(left=thin_side, right=thin_side, top=thick_side if top_thick else thin_side, bottom=thick_side if bottom_thick else thin_side)
 
 def apply_month_headers(ws):
-    if ws.title not in ["Gantt Besoins", "Calendrier réel"]:
-        return
+    if ws.title not in ["Gantt Besoins", "Calendrier réel"]: return
     last_col = find_last_used_column(ws)
     for merged in list(ws.merged_cells.ranges):
         if merged.min_row == 3 and merged.max_row == 3:
@@ -523,7 +527,6 @@ def apply_month_headers(ws):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[3].height = 30
 
-# ====================== STYLING FINAL (100% EXACT) ======================
 def apply_all_styling(wb):
     center_align = Alignment(horizontal="center", vertical="center")
     vertical_date = Alignment(horizontal="center", vertical="center", text_rotation=90)
@@ -701,10 +704,6 @@ if 'wb' not in st.session_state:
     st.session_state.wb = None
 if 'projects' not in st.session_state:
     st.session_state.projects = []
-if 'form_reset_counter' not in st.session_state:
-    st.session_state.form_reset_counter = 0
-if 'last_selected_key' not in st.session_state:
-    st.session_state.last_selected_key = ""
 if 'gantt_gap_confirmed' not in st.session_state:
     st.session_state.gantt_gap_confirmed = False
 if 'initial_rebuild_done' not in st.session_state:
@@ -714,11 +713,12 @@ if uploaded_file:
     if st.session_state.wb is None or st.button("Recharger le fichier"):
         st.session_state.wb = openpyxl.load_workbook(uploaded_file, data_only=False)
         st.session_state.initial_rebuild_done = False
-   
+
     wb = st.session_state.wb
     ws_desc = wb['Description projet et engag. RL']
     ws_gantt = wb['Gantt Besoins']
     ws_cal_reel = wb['Calendrier réel']
+
     start_date = get_previous_monday()
     dates = [start_date + timedelta(weeks=i) for i in range(120)]
     for col, d in enumerate(dates, start=2):
@@ -727,13 +727,14 @@ if uploaded_file:
             cell.number_format = "dd/mm/yyyy"
             cell.alignment = Alignment(horizontal="center", vertical="center", text_rotation=90)
             ws.column_dimensions[get_column_letter(col)].width = 5.0
+
     current_projects = []
     for row in range(3, ws_desc.max_row + 1):
         value = ws_desc.cell(row, 1).value
         if value and str(value).strip() and str(value).strip().lower() != "projet":
             current_projects.append(str(value).strip())
     st.session_state.projects = list(dict.fromkeys(current_projects))
-    st.write("Projets détectés :", st.session_state.projects)
+
     if not st.session_state.initial_rebuild_done:
         rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
         rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
@@ -830,7 +831,7 @@ if uploaded_file:
             st.rerun()
 
     # 4. Capacité NT
-    st.subheader("4. Capacité NT (saisie unique comme l’Engagement)")
+    st.subheader("4. Capacité NT")
     if can_access_capacity_nt():
         selected_cap = st.selectbox("Projet", st.session_state.projects, key="cap_select")
         row_cap = find_project_row(ws_desc, selected_cap)
@@ -842,33 +843,28 @@ if uploaded_file:
             if max_bur == 0: max_bur = math.floor(safe_float(ws_desc.cell(row_cap, 7).value) * 0.3)
             if max_vas == 0: max_vas = math.floor(safe_float(ws_desc.cell(row_cap, 8).value) * 0.3)
             st.info(f"**MAX NT autorisé** : Lit {max_lit} | Bureau {max_bur} | Vaste {max_vas}")
-            ws_rat = wb['Rattrapage'] if 'Rattrapage' in wb.sheetnames else None
-            cumul_def = safe_float(ws_rat.cell(ws_rat.max_row, 10).value) if ws_rat and ws_rat.max_row > 1 else 0
-            st.info(f"**Cumul Déficit Global actuel** : {int(cumul_def)} modules")
-        cap_deja_saisi = row_cap and any(safe_float(ws_desc.cell(row_cap, c).value) > 0 for c in [13,15,16])
-        cap_lit = st.number_input("Capacité NT Lit", value=safe_float(ws_desc.cell(row_cap, 13).value) if row_cap else 0.0, min_value=0.0, disabled=cap_deja_saisi, key=f"cap_lit_{selected_cap}")
-        cap_bur = st.number_input("Capacité NT Bureau", value=safe_float(ws_desc.cell(row_cap, 15).value) if row_cap else 0.0, min_value=0.0, disabled=cap_deja_saisi, key=f"cap_bur_{selected_cap}")
-        cap_vas = st.number_input("Capacité NT Vaste", value=safe_float(ws_desc.cell(row_cap, 16).value) if row_cap else 0.0, min_value=0.0, disabled=cap_deja_saisi, key=f"cap_vas_{selected_cap}")
-        dort_cap = math.ceil(cap_lit / 5.5) if cap_lit > 0 else 0
-        st.info(f"**Dortoir NT calculé automatiquement** : {dort_cap}")
-        if (cap_lit > max_lit or cap_bur > max_bur or cap_vas > max_vas) and row_cap:
-            st.error("⚠️ MAX NT dépassé → du rattrapage sera utilisé !")
-        if st.button("Enregistrer Capacité NT") and not cap_deja_saisi and row_cap:
-            ws_desc.cell(row_cap, 13, cap_lit)
-            ws_desc.cell(row_cap, 14, dort_cap)
-            ws_desc.cell(row_cap, 15, cap_bur)
-            ws_desc.cell(row_cap, 16, cap_vas)
-            ws_desc.cell(row_cap, 17, max(0, safe_float(ws_desc.cell(row_cap, 5).value) - cap_lit))
-            ws_desc.cell(row_cap, 18, max(0, safe_float(ws_desc.cell(row_cap, 6).value) - dort_cap))
-            ws_desc.cell(row_cap, 19, max(0, safe_float(ws_desc.cell(row_cap, 7).value) - cap_bur))
-            ws_desc.cell(row_cap, 20, max(0, safe_float(ws_desc.cell(row_cap, 8).value) - cap_vas))
-            st.success("✅ Capacité NT + Dortoir auto + Besoin à combler enregistrés")
-            st.rerun()
+            cap_deja_saisi = row_cap and any(safe_float(ws_desc.cell(row_cap, c).value) > 0 for c in [13,15,16])
+            cap_lit = st.number_input("Capacité NT Lit", value=safe_float(ws_desc.cell(row_cap, 13).value) if row_cap else 0.0, min_value=0.0, disabled=cap_deja_saisi, key=f"cap_lit_{selected_cap}")
+            cap_bur = st.number_input("Capacité NT Bureau", value=safe_float(ws_desc.cell(row_cap, 15).value) if row_cap else 0.0, min_value=0.0, disabled=cap_deja_saisi, key=f"cap_bur_{selected_cap}")
+            cap_vas = st.number_input("Capacité NT Vaste", value=safe_float(ws_desc.cell(row_cap, 16).value) if row_cap else 0.0, min_value=0.0, disabled=cap_deja_saisi, key=f"cap_vas_{selected_cap}")
+            dort_cap = math.ceil(cap_lit / 5.5) if cap_lit > 0 else 0
+            st.info(f"**Dortoir NT calculé automatiquement** : {dort_cap}")
+            if st.button("Enregistrer Capacité NT") and not cap_deja_saisi and row_cap:
+                ws_desc.cell(row_cap, 13, cap_lit)
+                ws_desc.cell(row_cap, 14, dort_cap)
+                ws_desc.cell(row_cap, 15, cap_bur)
+                ws_desc.cell(row_cap, 16, cap_vas)
+                ws_desc.cell(row_cap, 17, max(0, safe_float(ws_desc.cell(row_cap, 5).value) - cap_lit))
+                ws_desc.cell(row_cap, 18, max(0, safe_float(ws_desc.cell(row_cap, 6).value) - dort_cap))
+                ws_desc.cell(row_cap, 19, max(0, safe_float(ws_desc.cell(row_cap, 7).value) - cap_bur))
+                ws_desc.cell(row_cap, 20, max(0, safe_float(ws_desc.cell(row_cap, 8).value) - cap_vas))
+                st.success("✅ Capacité NT + Dortoir auto + Besoin à combler enregistrés")
+                st.rerun()
     else:
         st.warning("❌ Seuls les utilisateurs NT peuvent accéder à la Capacité NT")
 
     # 5. Engagement RL
-    st.subheader("5. Engagement RL (saisie unique)")
+    st.subheader("5. Engagement RL")
     if can_access_engagement_rl():
         selected_eng = st.selectbox("Projet", st.session_state.projects, key="eng_select")
         row_eng = find_project_row(ws_desc, selected_eng)
@@ -937,8 +933,7 @@ if uploaded_file:
         else:
             st.success("✅ Aucun gap détecté")
             st.session_state.gantt_gap_confirmed = True
-    confirm_gap = st.checkbox("Je confirme que les semaines vides sont correctes (report de projet, etc.)",
-                              value=st.session_state.gantt_gap_confirmed, key="confirm_gap")
+    confirm_gap = st.checkbox("Je confirme que les semaines vides sont correctes", value=st.session_state.gantt_gap_confirmed, key="confirm_gap")
     st.session_state.gantt_gap_confirmed = confirm_gap
 
     # 7. Saisie Calendrier Réel
@@ -951,15 +946,10 @@ if uploaded_file:
         selected_date = st.date_input("Date de la semaine", value=get_previous_monday(), key="week_input")
         week_monday = get_monday_of_week(selected_date)
         week_key = week_monday.strftime("%Y%m%d")
-        current_key = f"{selected_real}_{week_key}"
-        if st.session_state.last_selected_key != current_key:
-            st.session_state.form_reset_counter += 1
-            st.session_state.last_selected_key = current_key
-        reset = st.session_state.form_reset_counter
         st.info(f"**Semaine enregistrée (lundi) : {week_monday.strftime('%d/%m/%Y')}**")
         proj_row = find_project_row(ws_cal_reel, selected_real, start_row=5)
         if not proj_row:
-            st.error("Bloc projet non trouvé – Veuillez recharger le fichier ou ajouter le projet à nouveau.")
+            st.error("Bloc projet non trouvé.")
         else:
             col = find_or_create_week_column(ws_cal_reel, week_monday)
             existing_data = {
@@ -982,12 +972,12 @@ if uploaded_file:
                         "bureau_nt": safe_float(ws_cal_reel.cell(proj_row + 6, prev_col).value),
                         "vaste_nt": safe_float(ws_cal_reel.cell(proj_row + 7, prev_col).value)
                     }
-            dortoir_rl = st.number_input("Dortoir RL", min_value=0, value=int(existing_data["dortoir_rl"]), key=f"dortoir_rl_{selected_real}_{week_key}_{reset}")
-            bureau_rl = st.number_input("Bureau RL", min_value=0, value=int(existing_data["bureau_rl"]), key=f"bureau_rl_{selected_real}_{week_key}_{reset}")
-            vaste_rl = st.number_input("Vaste RL", min_value=0, value=int(existing_data["vaste_rl"]), key=f"vaste_rl_{selected_real}_{week_key}_{reset}")
-            dortoir_nt = st.number_input("Dortoir NT", min_value=0, value=int(existing_data["dortoir_nt"]), key=f"dortoir_nt_{selected_real}_{week_key}_{reset}")
-            bureau_nt = st.number_input("Bureau NT", min_value=0, value=int(existing_data["bureau_nt"]), key=f"bureau_nt_{selected_real}_{week_key}_{reset}")
-            vaste_nt = st.number_input("Vaste NT", min_value=0, value=int(existing_data["vaste_nt"]), key=f"vaste_nt_{selected_real}_{week_key}_{reset}")
+            dortoir_rl = st.number_input("Dortoir RL", min_value=0, value=int(existing_data["dortoir_rl"]), key=f"dortoir_rl_{selected_real}_{week_key}")
+            bureau_rl = st.number_input("Bureau RL", min_value=0, value=int(existing_data["bureau_rl"]), key=f"bureau_rl_{selected_real}_{week_key}")
+            vaste_rl = st.number_input("Vaste RL", min_value=0, value=int(existing_data["vaste_rl"]), key=f"vaste_rl_{selected_real}_{week_key}")
+            dortoir_nt = st.number_input("Dortoir NT", min_value=0, value=int(existing_data["dortoir_nt"]), key=f"dortoir_nt_{selected_real}_{week_key}")
+            bureau_nt = st.number_input("Bureau NT", min_value=0, value=int(existing_data["bureau_nt"]), key=f"bureau_nt_{selected_real}_{week_key}")
+            vaste_nt = st.number_input("Vaste NT", min_value=0, value=int(existing_data["vaste_nt"]), key=f"vaste_nt_{selected_real}_{week_key}")
             if st.button("Enregistrer saisie réelle pour cette semaine", type="primary"):
                 last_col = find_last_filled_column(ws_cal_reel, proj_row, col)
                 if last_col and last_col < col - 1:
@@ -1006,7 +996,6 @@ if uploaded_file:
                 ws_cal_reel.cell(proj_row + 8, col, total_nt)
                 ws_cal_reel.cell(proj_row + 9, col, total_module)
                 st.success(f"✅ Saisie enregistrée pour {selected_real} – Semaine du {week_monday.strftime('%d/%m/%Y')}")
-                st.session_state.form_reset_counter += 1
                 st.rerun()
 
     # 8. Rattrapage
@@ -1031,20 +1020,11 @@ if uploaded_file:
                 output_file = f'besoins_maj_{timestamp}.xlsx'
                 wb.save(output_file)
                 with open(output_file, 'rb') as f:
-                    st.download_button(
-                        label="📥 Télécharger le fichier mis à jour",
-                        data=f,
-                        file_name=output_file,
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
-                send_to_all_users(
-                    subject="Export mis à jour - Gestion Contrats RL/NT",
-                    body="Voici la dernière version du fichier.",
-                    attachment_path=output_file
-                )
-            st.success("✅ Export terminé à 100% – Aucune bordure fine sur la ligne du nom des projets !")
+                    st.download_button("📥 Télécharger", f, output_file)
+                send_to_all_users("Export mis à jour - Gestion Contrats RL/NT", "Voici la dernière version du fichier.", output_file)
+            st.success("✅ Export terminé + envoyé par email à tous les utilisateurs !")
 
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ 100% terminé ! Bordures fines supprimées sur la ligne du nom de chaque projet. Copie-colle et exporte maintenant.")
+st.caption("✅ Application complète avec changement de mot de passe • Rôles RL/NT • Emails automatiques")
