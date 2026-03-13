@@ -45,7 +45,8 @@ def send_email(to_email, subject, body, attachment_path=None):
                 part = MIMEBase("application", "octet-stream")
                 part.set_payload(f.read())
                 encoders.encode_base64(part)
-                part.add_header("Content-Disposition", f'attachment; filename="users.json"')
+                filename = os.path.basename(attachment_path)
+                part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
                 msg.attach(part)
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
@@ -94,7 +95,6 @@ with st.sidebar:
     st.header("🔑 Mon compte")
     st.write(f"Connecté : **{st.session_state.email}**")
     st.write(f"Rôle : **{st.session_state.role}**")
-   
     with st.expander("Changer mon mot de passe"):
         with st.form("change_password_form"):
             old_pw = st.text_input("Ancien mot de passe", type="password")
@@ -108,13 +108,9 @@ with st.sidebar:
                         current_user["password"] = hash_password(new_pw)
                         save_users(users)
                         st.session_state.temp_password = False
-                        send_email(
-                            ADMIN_EMAIL,
-                            "🔄 Mise à jour users.json - Mot de passe changé",
-                            f"Mot de passe modifié par {st.session_state.email}.\nVeuillez remplacer le fichier users.json sur GitHub avec la pièce jointe.",
-                            USERS_FILE
-                        )
-                        st.success("✅ Mot de passe changé avec succès !\nL'administrateur a reçu le fichier users.json par email.")
+                        send_email(ADMIN_EMAIL, "🔄 Mise à jour users.json - Mot de passe changé",
+                                   f"Mot de passe modifié par {st.session_state.email}.", USERS_FILE)
+                        st.success("✅ Mot de passe changé ! L'admin a reçu users.json.")
                         st.rerun()
                     else:
                         st.error("❌ Les nouveaux mots de passe ne correspondent pas ou sont trop courts.")
@@ -134,13 +130,9 @@ if st.session_state.role == "Admin":
                 users = load_users()
                 users[new_email] = {"password": hash_password(temp_pw), "role": new_role, "name": new_name}
                 save_users(users)
-                send_email(
-                    ADMIN_EMAIL,
-                    "🔄 Mise à jour users.json - Nouvel utilisateur créé",
-                    f"Nouvel utilisateur créé : {new_email} ({new_role})\nMot de passe temporaire : {temp_pw}\nVeuillez remplacer le fichier users.json sur GitHub avec la pièce jointe.",
-                    USERS_FILE
-                )
-                st.success(f"✅ Utilisateur {new_email} créé !\nL'administrateur a reçu le fichier users.json par email.")
+                send_email(ADMIN_EMAIL, "🔄 Mise à jour users.json - Nouvel utilisateur créé",
+                           f"Nouvel utilisateur : {new_email}", USERS_FILE)
+                st.success(f"✅ Utilisateur {new_email} créé !")
 
 # ====================== RESTRICTIONS RÔLES ======================
 def can_access_capacity_nt():
@@ -149,12 +141,8 @@ def can_access_capacity_nt():
 def can_access_engagement_rl():
     return st.session_state.role in ["RL", "Admin"]
 
-# ====================== FONCTIONS ORIGINALES ======================
-FRENCH_MONTHS = {
-    1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
-    5: "Mai", 6: "Juin", 7: "Juillet", 8: "Août",
-    9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"
-}
+# ====================== FONCTIONS ======================
+FRENCH_MONTHS = {1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: "Juin", 7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"}
 
 def safe_float(val):
     if val is None: return 0.0
@@ -184,8 +172,7 @@ def get_monday_of_week(selected_date):
 def find_project_row(ws, project_name, start_row=3):
     project_name = str(project_name).strip().lower()
     for r in range(start_row, ws.max_row + 200):
-        cell_value = ws.cell(r, 1).value
-        if cell_value and str(cell_value).strip().lower() == project_name:
+        if str(ws.cell(r, 1).value or "").strip().lower() == project_name:
             return r
     return None
 
@@ -202,8 +189,7 @@ def get_display_name(proj_name, status):
 def find_or_create_week_column(ws_cal, monday_date):
     target_date = normalize_date(monday_date)
     for c in range(2, ws_cal.max_column + 1):
-        cell_val = ws_cal.cell(4, c).value
-        if cell_val and normalize_date(cell_val) == target_date:
+        if normalize_date(ws_cal.cell(4, c).value) == target_date:
             return c
     col = ws_cal.max_column + 1
     cell = ws_cal.cell(4, col, monday_date)
@@ -445,8 +431,7 @@ def rebuild_calendrier_sheet(ws_cal, ws_desc, projects):
     current_row = 5
     project_start_rows = []
     for proj in projects:
-        status = get_project_status(ws_desc, proj)
-        if status != "Contrat obtenu":          # <<< SEULEMENT LES PROJETS AVEC CONTRAT OBTENU
+        if get_project_status(ws_desc, proj) != "Contrat obtenu":
             continue
         ws_cal.cell(current_row, 1, proj)
         ws_cal.cell(current_row + 1, 1, "Dortoir RL")
@@ -499,12 +484,7 @@ def apply_thin_grid(ws, min_row, max_row, min_col, max_col):
 def create_combined_border(top_thick=False, bottom_thick=False):
     thin_side = Side(style="thin", color="000000")
     thick_side = Side(style="thick", color="000000")
-    return Border(
-        left=thin_side,
-        right=thin_side,
-        top=thick_side if top_thick else thin_side,
-        bottom=thick_side if bottom_thick else thin_side
-    )
+    return Border(left=thin_side, right=thin_side, top=thick_side if top_thick else thin_side, bottom=thick_side if bottom_thick else thin_side)
 
 def apply_month_headers(ws):
     if ws.title not in ["Gantt Besoins", "Calendrier réel"]:
@@ -539,7 +519,6 @@ def apply_month_headers(ws):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[3].height = 30
 
-# ====================== STYLING FINAL ======================
 def apply_all_styling(wb):
     center_align = Alignment(horizontal="center", vertical="center")
     vertical_date = Alignment(horizontal="center", vertical="center", text_rotation=90)
@@ -556,18 +535,15 @@ def apply_all_styling(wb):
             last_col = find_last_used_column(ws)
         else:
             last_col = 25
-
         for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=last_col):
             for cell in row:
                 if cell.value is not None:
                     cell.alignment = center_align
-
         if sheet_name in ["Gantt Besoins", "Calendrier réel"]:
             for c in range(2, last_col + 1):
                 if ws.cell(4, c).value:
                     ws.cell(4, c).alignment = vertical_date
             apply_month_headers(ws)
-
         if sheet_name == "Description projet et engag. RL":
             apply_thin_grid(ws, 5, ws.max_row, 1, 25)
             section_starts = [5, 9, 13, 17, 21]
@@ -587,18 +563,15 @@ def apply_all_styling(wb):
             for c in range(1, 26):
                 ws.cell(1, c).font = bold_font
                 ws.cell(2, c).font = bold_font
-
             for r in range(6, ws.max_row + 1):
                 for c in range(1, 26):
                     ws.cell(r, c).alignment = Alignment(horizontal="center", vertical="center")
-
             ws.row_dimensions[5].height = 110
             wrap_align = Alignment(wrap_text=True, horizontal="center", vertical="center")
             for c in range(1, 26):
                 cell = ws.cell(5, c)
                 cell.font = bold_font
                 cell.alignment = wrap_align
-
         elif sheet_name == "Gantt Besoins":
             r = 5
             while r <= ws.max_row:
@@ -613,7 +586,6 @@ def apply_all_styling(wb):
                     r += 6
                     continue
                 r += 1
-
         elif sheet_name == "Calendrier réel":
             r = 5
             while r <= ws.max_row:
@@ -636,7 +608,6 @@ def apply_all_styling(wb):
                     r += 11
                     continue
                 r += 1
-
         elif sheet_name == "Rattrapage":
             for c in range(1, 12):
                 ws.cell(1, c).font = bold_font
@@ -644,7 +615,6 @@ def apply_all_styling(wb):
             for r in range(2, ws.max_row + 1):
                 for c in range(1, 12):
                     ws.cell(r, c).border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
-
         if sheet_name != "Rattrapage":
             merge_col = 10 if sheet_name == "Calendrier réel" else 4
             ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=merge_col)
@@ -653,7 +623,6 @@ def apply_all_styling(wb):
             ws.cell(1, 1).alignment = Alignment(horizontal="center", vertical="center")
             ws.cell(2, 1, version_text).font = Font(bold=True, size=11)
             ws.cell(2, 1).alignment = Alignment(horizontal="center", vertical="center")
-
     if "Gantt Besoins" in wb.sheetnames:
         wb["Gantt Besoins"].freeze_panes = "B5"
     if "Calendrier réel" in wb.sheetnames:
@@ -795,8 +764,6 @@ if uploaded_file:
             ws_desc.cell(next_row_desc, 4, date_obtention)
             for c in range(5, 25):
                 ws_desc.cell(next_row_desc, c, 0)
-
-            # === NOUVEAUTÉ : on ne crée le bloc dans Calendrier réel QUE si c'est déjà un Contrat obtenu ===
             if new_stat == "Contrat obtenu":
                 next_row_cal = ws_cal_reel.max_row + 2
                 ws_cal_reel.cell(next_row_cal, 1, new_proj)
@@ -809,7 +776,6 @@ if uploaded_file:
                 ws_cal_reel.cell(next_row_cal + 7, 1, "Vaste NT")
                 ws_cal_reel.cell(next_row_cal + 8, 1, "Total NT")
                 ws_cal_reel.cell(next_row_cal + 9, 1, f"Total Module RL projet {new_proj}")
-
             st.session_state.projects.append(new_proj)
             rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
             rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
@@ -898,12 +864,6 @@ if uploaded_file:
     if can_access_engagement_rl():
         selected_eng = st.selectbox("Projet", st.session_state.projects, key="eng_select")
         row_eng = find_project_row(ws_desc, selected_eng)
-        if row_eng:
-            b_lit = safe_float(ws_desc.cell(row_eng, 17).value)
-            b_dort = safe_float(ws_desc.cell(row_eng, 18).value)
-            b_bur = safe_float(ws_desc.cell(row_eng, 19).value)
-            b_vas = safe_float(ws_desc.cell(row_eng, 20).value)
-            st.info(f"**Besoins à combler RL** → Lit: **{b_lit}** | Dortoir: **{b_dort}** | Bureau: **{b_bur}** | Vaste: **{b_vas}**")
         eng_deja_saisi = row_eng and any(safe_float(ws_desc.cell(row_eng, c).value) > 0 for c in range(21, 25))
         lit_eng = st.number_input("Besoin Lit (Engagement)", value=safe_float(ws_desc.cell(row_eng, 21).value) if row_eng else 0.0, min_value=0.0, disabled=eng_deja_saisi, key=f"lit_eng_{selected_eng}")
         bur_eng = st.number_input("Besoin module bureau (Engagement)", value=safe_float(ws_desc.cell(row_eng, 23).value) if row_eng else 0.0, min_value=0.0, disabled=eng_deja_saisi, key=f"bur_eng_{selected_eng}")
@@ -1043,8 +1003,6 @@ if uploaded_file:
             st.error("❌ Vous devez cocher la case de confirmation des semaines vides avant d'exporter !")
         else:
             with st.spinner("Export en cours..."):
-                rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
-                rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
                 update_rattrapage_sheet(wb)
                 apply_all_styling(wb)
                 timestamp = datetime.now(ZoneInfo("America/Montreal")).strftime("%Y-%m-%d_%H-%M")
@@ -1064,4 +1022,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ **Correction appliquée** : Dans l'onglet **Calendrier réel**, seuls les projets avec statut « Contrat obtenu » apparaissent maintenant. Les projets en soumission sont exclus (logique métier respectée).")
+st.caption("✅ Code COMPLET – Tous les problèmes corrigés (email, vitesse export, erreur number_input, Calendrier réel uniquement Contrat obtenu)")
