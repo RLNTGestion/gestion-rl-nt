@@ -19,7 +19,6 @@ SMTP_PORT = 587
 SMTP_EMAIL = "rlnt.gestion@gmail.com"
 SMTP_PASSWORD = st.secrets["smtp"]["password"]
 ADMIN_EMAIL = "rlnt.gestion@gmail.com"
-
 USERS_FILE = "users.json"
 
 def load_users():
@@ -95,7 +94,7 @@ with st.sidebar:
     st.header("🔑 Mon compte")
     st.write(f"Connecté : **{st.session_state.email}**")
     st.write(f"Rôle : **{st.session_state.role}**")
-    
+   
     with st.expander("Changer mon mot de passe"):
         with st.form("change_password_form"):
             old_pw = st.text_input("Ancien mot de passe", type="password")
@@ -548,7 +547,6 @@ def apply_all_styling(wb):
     thick_side = Side(style="thick", color="000000")
     timestamp = datetime.now(ZoneInfo("America/Montreal")).strftime("%d/%m/%Y %H:%M")
     version_text = f"Version du {timestamp}"
-
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
         if sheet_name == "Description projet et engag. RL":
@@ -591,18 +589,18 @@ def apply_all_styling(wb):
                 ws.cell(1, c).font = bold_font
                 ws.cell(2, c).font = bold_font
 
-            # FIX DÉFINITIF WRAP_TEXT LIGNE 5 (après TOUT le reste du styling)
-            ws.row_dimensions[5].height = 85
+            # Centrage forcé sur toutes les lignes SAUF la ligne 5 (pour ne pas écraser le wrap_text)
+            for r in range(6, ws.max_row + 1):
+                for c in range(1, 26):
+                    ws.cell(r, c).alignment = Alignment(horizontal="center", vertical="center")
+
+            # === FIX DÉFINITIF WRAP_TEXT LIGNE 5 (après TOUT le reste du styling - c'est la correction) ===
+            ws.row_dimensions[5].height = 110  # Hauteur augmentée pour une lisibilité parfaite
             wrap_align = Alignment(wrap_text=True, horizontal="center", vertical="center")
             for c in range(1, 26):
                 cell = ws.cell(5, c)
                 cell.font = bold_font
                 cell.alignment = wrap_align
-
-            # Centrage forcé sur toutes les lignes
-            for r in range(5, ws.max_row + 1):
-                for c in range(1, 26):
-                    ws.cell(r, c).alignment = Alignment(horizontal="center", vertical="center")
 
         # === GANTT BESOINS ===
         elif sheet_name == "Gantt Besoins":
@@ -737,7 +735,6 @@ def update_rattrapage_sheet(wb):
 # ====================== INTERFACE STREAMLIT ======================
 st.title("Gestion Contrats RL - Calendrier & Calculateur")
 st.markdown(f"**Connecté en tant que : {st.session_state.email} ({st.session_state.role})**")
-
 uploaded_file = st.file_uploader("Upload Excel (Modèle Base.xlsx)", type="xlsx")
 
 if 'wb' not in st.session_state:
@@ -1069,4 +1066,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ 100% terminé – Renvoi à la ligne automatique forcé sur la ligne 5 de Description projet et engag. RL")
+st.caption("✅ 100% terminé – **Renvoi à la ligne automatique forcé sur la ligne 5** de Description projet et engag. RL (hauteur 110 + wrap_text appliqué en dernier)")
