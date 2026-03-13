@@ -3,5 +3,10 @@
     "password": "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918",
     "role": "Admin",
     "name": "Administrateur"
+  },
+  "jdallaire@locationrl.com": {
+    "password": "c1b58cf3c3c80032b3f06d7abc1b30209ac247f7240d45b727bec68561651393",
+    "role": "RL",
+    "name": "Jonathan Dallaire"
   }
 }
