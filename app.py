@@ -446,7 +446,8 @@ def rebuild_calendrier_sheet(ws_cal, ws_desc, projects):
     project_start_rows = []
     for proj in projects:
         status = get_project_status(ws_desc, proj)
-        if status == "Abandonné": continue
+        if status != "Contrat obtenu":          # <<< SEULEMENT LES PROJETS AVEC CONTRAT OBTENU
+            continue
         ws_cal.cell(current_row, 1, proj)
         ws_cal.cell(current_row + 1, 1, "Dortoir RL")
         ws_cal.cell(current_row + 2, 1, "Bureau RL")
@@ -538,7 +539,7 @@ def apply_month_headers(ws):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[3].height = 30
 
-# ====================== STYLING FINAL (FIX DÉFINITIF LIGNE 5) ======================
+# ====================== STYLING FINAL ======================
 def apply_all_styling(wb):
     center_align = Alignment(horizontal="center", vertical="center")
     vertical_date = Alignment(horizontal="center", vertical="center", text_rotation=90)
@@ -556,7 +557,6 @@ def apply_all_styling(wb):
         else:
             last_col = 25
 
-        # Centrage général
         for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=last_col):
             for cell in row:
                 if cell.value is not None:
@@ -568,7 +568,6 @@ def apply_all_styling(wb):
                     ws.cell(4, c).alignment = vertical_date
             apply_month_headers(ws)
 
-        # === DESCRIPTION PROJET ET ENGAG. RL ===
         if sheet_name == "Description projet et engag. RL":
             apply_thin_grid(ws, 5, ws.max_row, 1, 25)
             section_starts = [5, 9, 13, 17, 21]
@@ -589,20 +588,17 @@ def apply_all_styling(wb):
                 ws.cell(1, c).font = bold_font
                 ws.cell(2, c).font = bold_font
 
-            # Centrage forcé sur toutes les lignes SAUF la ligne 5 (pour ne pas écraser le wrap_text)
             for r in range(6, ws.max_row + 1):
                 for c in range(1, 26):
                     ws.cell(r, c).alignment = Alignment(horizontal="center", vertical="center")
 
-            # === FIX DÉFINITIF WRAP_TEXT LIGNE 5 (après TOUT le reste du styling - c'est la correction) ===
-            ws.row_dimensions[5].height = 110  # Hauteur augmentée pour une lisibilité parfaite
+            ws.row_dimensions[5].height = 110
             wrap_align = Alignment(wrap_text=True, horizontal="center", vertical="center")
             for c in range(1, 26):
                 cell = ws.cell(5, c)
                 cell.font = bold_font
                 cell.alignment = wrap_align
 
-        # === GANTT BESOINS ===
         elif sheet_name == "Gantt Besoins":
             r = 5
             while r <= ws.max_row:
@@ -618,7 +614,6 @@ def apply_all_styling(wb):
                     continue
                 r += 1
 
-        # === CALENDRIER RÉEL ===
         elif sheet_name == "Calendrier réel":
             r = 5
             while r <= ws.max_row:
@@ -642,7 +637,6 @@ def apply_all_styling(wb):
                     continue
                 r += 1
 
-        # === RATTRAPAGE ===
         elif sheet_name == "Rattrapage":
             for c in range(1, 12):
                 ws.cell(1, c).font = bold_font
@@ -801,17 +795,21 @@ if uploaded_file:
             ws_desc.cell(next_row_desc, 4, date_obtention)
             for c in range(5, 25):
                 ws_desc.cell(next_row_desc, c, 0)
-            next_row_cal = ws_cal_reel.max_row + 2
-            ws_cal_reel.cell(next_row_cal, 1, new_proj)
-            ws_cal_reel.cell(next_row_cal + 1, 1, "Dortoir RL")
-            ws_cal_reel.cell(next_row_cal + 2, 1, "Bureau RL")
-            ws_cal_reel.cell(next_row_cal + 3, 1, "Vaste RL")
-            ws_cal_reel.cell(next_row_cal + 4, 1, "Total RL")
-            ws_cal_reel.cell(next_row_cal + 5, 1, "Dortoir NT")
-            ws_cal_reel.cell(next_row_cal + 6, 1, "Bureau NT")
-            ws_cal_reel.cell(next_row_cal + 7, 1, "Vaste NT")
-            ws_cal_reel.cell(next_row_cal + 8, 1, "Total NT")
-            ws_cal_reel.cell(next_row_cal + 9, 1, f"Total Module RL projet {new_proj}")
+
+            # === NOUVEAUTÉ : on ne crée le bloc dans Calendrier réel QUE si c'est déjà un Contrat obtenu ===
+            if new_stat == "Contrat obtenu":
+                next_row_cal = ws_cal_reel.max_row + 2
+                ws_cal_reel.cell(next_row_cal, 1, new_proj)
+                ws_cal_reel.cell(next_row_cal + 1, 1, "Dortoir RL")
+                ws_cal_reel.cell(next_row_cal + 2, 1, "Bureau RL")
+                ws_cal_reel.cell(next_row_cal + 3, 1, "Vaste RL")
+                ws_cal_reel.cell(next_row_cal + 4, 1, "Total RL")
+                ws_cal_reel.cell(next_row_cal + 5, 1, "Dortoir NT")
+                ws_cal_reel.cell(next_row_cal + 6, 1, "Bureau NT")
+                ws_cal_reel.cell(next_row_cal + 7, 1, "Vaste NT")
+                ws_cal_reel.cell(next_row_cal + 8, 1, "Total NT")
+                ws_cal_reel.cell(next_row_cal + 9, 1, f"Total Module RL projet {new_proj}")
+
             st.session_state.projects.append(new_proj)
             rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
             rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
@@ -1066,4 +1064,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ 100% terminé – **Renvoi à la ligne automatique forcé sur la ligne 5** de Description projet et engag. RL (hauteur 110 + wrap_text appliqué en dernier)")
+st.caption("✅ **Correction appliquée** : Dans l'onglet **Calendrier réel**, seuls les projets avec statut « Contrat obtenu » apparaissent maintenant. Les projets en soumission sont exclus (logique métier respectée).")
