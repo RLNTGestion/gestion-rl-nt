@@ -11,7 +11,7 @@ from email.mime.base import MIMEBase
 from email import encoders
 from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from zoneinfo import ZoneInfo   # ← Correction fuseau horaire Québec
+from zoneinfo import ZoneInfo   # ← Fuseau Québec
 
 # ====================== CONFIG EMAIL GMAIL ======================
 SMTP_SERVER = "smtp.gmail.com"
@@ -92,30 +92,31 @@ if not st.session_state.logged_in:
             st.error("❌ Identifiants incorrects")
     st.stop()
 
-# ====================== CHANGER MOT DE PASSE ======================
-if st.session_state.temp_password:
-    st.warning("⚠️ Vous devez changer votre mot de passe temporaire avant de continuer.")
-
-st.subheader("🔑 Changer mon mot de passe")
-with st.form("change_password_form"):
-    old_pw = st.text_input("Ancien mot de passe", type="password")
-    new_pw = st.text_input("Nouveau mot de passe", type="password")
-    confirm_pw = st.text_input("Confirmer le nouveau mot de passe", type="password")
-    submitted = st.form_submit_button("Changer mon mot de passe")
-    if submitted:
-        users = load_users()
-        current_user = users[st.session_state.email]
-        if hash_password(old_pw) == current_user["password"]:
-            if new_pw == confirm_pw and len(new_pw) >= 6:
-                current_user["password"] = hash_password(new_pw)
-                save_users(users)
-                st.session_state.temp_password = False
-                st.success("✅ Mot de passe changé avec succès !")
-                st.rerun()
-            else:
-                st.error("❌ Les deux nouveaux mots de passe ne correspondent pas ou sont trop courts.")
-        else:
-            st.error("❌ Ancien mot de passe incorrect.")
+# ====================== SIDEBAR : MON COMPTE (CHANGER MDP) ======================
+with st.sidebar:
+    st.header("🔑 Mon compte")
+    st.write(f"Connecté : **{st.session_state.email}**")
+    st.write(f"Rôle : **{st.session_state.role}**")
+    
+    with st.expander("Changer mon mot de passe"):
+        with st.form("change_password_form"):
+            old_pw = st.text_input("Ancien mot de passe", type="password")
+            new_pw = st.text_input("Nouveau mot de passe", type="password")
+            confirm_pw = st.text_input("Confirmer le nouveau mot de passe", type="password")
+            if st.form_submit_button("Changer le mot de passe"):
+                users = load_users()
+                current_user = users[st.session_state.email]
+                if hash_password(old_pw) == current_user["password"]:
+                    if new_pw == confirm_pw and len(new_pw) >= 6:
+                        current_user["password"] = hash_password(new_pw)
+                        save_users(users)
+                        st.session_state.temp_password = False
+                        st.success("✅ Mot de passe changé avec succès !")
+                        st.rerun()
+                    else:
+                        st.error("❌ Les nouveaux mots de passe ne correspondent pas ou sont trop courts.")
+                else:
+                    st.error("❌ Ancien mot de passe incorrect.")
 
 # ====================== ADMIN PANEL ======================
 if st.session_state.role == "Admin":
@@ -141,7 +142,7 @@ def can_access_capacity_nt():
 def can_access_engagement_rl():
     return st.session_state.role in ["RL", "Admin"]
 
-# ====================== MOIS EN FRANÇAIS ======================
+# ====================== TON CODE ORIGINAL COMPLET ======================
 FRENCH_MONTHS = {
     1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
     5: "Mai", 6: "Juin", 7: "Juillet", 8: "Août",
@@ -482,7 +483,7 @@ def rebuild_calendrier_sheet(ws_cal, ws_desc, projects):
         ws_cal.cell(total_row + 8, c, total_nt)
         ws_cal.cell(total_row + 9, c, total_module)
 
-# ====================== GRILLE FINE + STYLING ======================
+# ====================== GRILLE FINE ======================
 def apply_thin_grid(ws, min_row, max_row, min_col, max_col):
     thin_side = Side(style="thin", color="000000")
     thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
@@ -493,10 +494,16 @@ def apply_thin_grid(ws, min_row, max_row, min_col, max_col):
 def create_combined_border(top_thick=False, bottom_thick=False):
     thin_side = Side(style="thin", color="000000")
     thick_side = Side(style="thick", color="000000")
-    return Border(left=thin_side, right=thin_side, top=thick_side if top_thick else thin_side, bottom=thick_side if bottom_thick else thin_side)
+    return Border(
+        left=thin_side,
+        right=thin_side,
+        top=thick_side if top_thick else thin_side,
+        bottom=thick_side if bottom_thick else thin_side
+    )
 
 def apply_month_headers(ws):
-    if ws.title not in ["Gantt Besoins", "Calendrier réel"]: return
+    if ws.title not in ["Gantt Besoins", "Calendrier réel"]:
+        return
     last_col = find_last_used_column(ws)
     for merged in list(ws.merged_cells.ranges):
         if merged.min_row == 3 and merged.max_row == 3:
@@ -527,13 +534,14 @@ def apply_month_headers(ws):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[3].height = 30
 
+# ====================== STYLING FINAL (100% EXACT) ======================
 def apply_all_styling(wb):
     center_align = Alignment(horizontal="center", vertical="center")
     vertical_date = Alignment(horizontal="center", vertical="center", text_rotation=90)
     bold_font = Font(bold=True)
     thin_side = Side(style="thin", color="000000")
     thick_side = Side(style="thick", color="000000")
-    # === CORRECTION FUSEAU HORAIRE QUÉBEC ===
+    # Fuseau Québec
     timestamp = datetime.now(ZoneInfo("America/Montreal")).strftime("%d/%m/%Y %H:%M")
     version_text = f"Version du {timestamp}"
     for sheet_name in wb.sheetnames:
@@ -548,9 +556,32 @@ def apply_all_styling(wb):
                 if ws.cell(4, c).value:
                     ws.cell(4, c).alignment = vertical_date
             apply_month_headers(ws)
-        # ... (le reste du styling est identique à ta version originale)
-        # === Gantt Besoins ===
-        if sheet_name == "Gantt Besoins":
+        # === DESCRIPTION PROJET ET ENGAG. RL (TON STYLING ORIGINAL) ===
+        if sheet_name == "Description projet et engag. RL":
+            apply_thin_grid(ws, 5, ws.max_row, 1, 24)
+            section_starts = [5, 9, 13, 17, 21]
+            for r in range(5, ws.max_row + 1):
+                for col in section_starts:
+                    cell = ws.cell(r, col)
+                    border = cell.border
+                    cell.border = Border(left=thick_side, right=border.right, top=border.top, bottom=border.bottom)
+                    if col > 1:
+                        prev_cell = ws.cell(r, col - 1)
+                        border_prev = prev_cell.border
+                        prev_cell.border = Border(right=thick_side, left=border_prev.left, top=border_prev.top, bottom=border_prev.bottom)
+            for r in range(5, ws.max_row + 1):
+                cell = ws.cell(r, 24)
+                border = cell.border
+                cell.border = Border(right=thick_side, left=border.left, top=border.top, bottom=border.bottom)
+            for c in range(1, 25):
+                ws.cell(1, c).font = bold_font
+                ws.cell(2, c).font = bold_font
+            ws.row_dimensions[5].height = 80
+            for c in range(1, 25):
+                ws.cell(5, c).font = bold_font
+                ws.cell(5, c).alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
+        # === GANTT BESOINS ===
+        elif sheet_name == "Gantt Besoins":
             r = 5
             while r <= ws.max_row:
                 val = str(ws.cell(r, 1).value or "").strip()
@@ -564,7 +595,7 @@ def apply_all_styling(wb):
                     r += 6
                     continue
                 r += 1
-        # === Calendrier réel ===
+        # === CALENDRIER RÉEL ===
         elif sheet_name == "Calendrier réel":
             r = 5
             while r <= ws.max_row:
@@ -587,7 +618,7 @@ def apply_all_styling(wb):
                     r += 11
                     continue
                 r += 1
-        # === Rattrapage ===
+        # === RATTRAPAGE ===
         elif sheet_name == "Rattrapage":
             for c in range(1, 12):
                 ws.cell(1, c).font = bold_font
@@ -761,7 +792,6 @@ if uploaded_file:
             rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
             rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
             st.success(f"✅ {new_proj} ajouté !")
-            # === CORRECTION FUSEAU HORAIRE QUÉBEC ===
             timestamp = datetime.now(ZoneInfo("America/Montreal")).strftime("%Y-%m-%d_%H-%M")
             output_file = f'besoins_maj_{timestamp}.xlsx'
             wb.save(output_file)
@@ -916,7 +946,8 @@ if uploaded_file:
         else:
             st.success("✅ Aucun gap détecté")
             st.session_state.gantt_gap_confirmed = True
-    confirm_gap = st.checkbox("Je confirme que les semaines vides sont correctes", value=st.session_state.gantt_gap_confirmed, key="confirm_gap")
+    confirm_gap = st.checkbox("Je confirme que les semaines vides sont correctes (report de projet, etc.)",
+                              value=st.session_state.gantt_gap_confirmed, key="confirm_gap")
     st.session_state.gantt_gap_confirmed = confirm_gap
 
     # 7. Saisie Calendrier Réel
@@ -999,16 +1030,20 @@ if uploaded_file:
                 rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
                 update_rattrapage_sheet(wb)
                 apply_all_styling(wb)
-                # === CORRECTION FUSEAU HORAIRE QUÉBEC ===
                 timestamp = datetime.now(ZoneInfo("America/Montreal")).strftime("%Y-%m-%d_%H-%M")
                 output_file = f'besoins_maj_{timestamp}.xlsx'
                 wb.save(output_file)
                 with open(output_file, 'rb') as f:
-                    st.download_button("📥 Télécharger", f, output_file)
+                    st.download_button(
+                        label="📥 Télécharger le fichier mis à jour",
+                        data=f,
+                        file_name=output_file,
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
                 send_to_all_users("Export mis à jour - Gestion Contrats RL/NT", "Voici la dernière version du fichier.", output_file)
             st.success("✅ Export terminé + envoyé par email à tous les utilisateurs !")
 
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ Application complète avec fuseau horaire Québec (America/Montreal) • Changement de mot de passe • Rôles RL/NT")
+st.caption("✅ Application complète avec changement de mot de passe • Rôles RL/NT • Emails automatiques • Fuseau Québec")
