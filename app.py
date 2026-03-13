@@ -46,7 +46,7 @@ def send_email(to_email, subject, body, attachment_path=None):
                 part = MIMEBase("application", "octet-stream")
                 part.set_payload(f.read())
                 encoders.encode_base64(part)
-                part.add_header("Content-Disposition", f'attachment; filename="{os.path.basename(attachment_path)}"')
+                part.add_header("Content-Disposition", f'attachment; filename="users.json"')
                 msg.attach(part)
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
@@ -90,11 +90,12 @@ if not st.session_state.logged_in:
             st.error("❌ Identifiants incorrects")
     st.stop()
 
-# ====================== SIDEBAR MON COMPTE ======================
+# ====================== SIDEBAR - CHANGEMENT MDP ======================
 with st.sidebar:
     st.header("🔑 Mon compte")
     st.write(f"Connecté : **{st.session_state.email}**")
     st.write(f"Rôle : **{st.session_state.role}**")
+    
     with st.expander("Changer mon mot de passe"):
         with st.form("change_password_form"):
             old_pw = st.text_input("Ancien mot de passe", type="password")
@@ -108,7 +109,13 @@ with st.sidebar:
                         current_user["password"] = hash_password(new_pw)
                         save_users(users)
                         st.session_state.temp_password = False
-                        st.success("✅ Mot de passe changé avec succès !")
+                        send_email(
+                            ADMIN_EMAIL,
+                            "🔄 Mise à jour users.json - Mot de passe changé",
+                            f"Mot de passe modifié par {st.session_state.email}.\nVeuillez remplacer le fichier users.json sur GitHub avec la pièce jointe.",
+                            USERS_FILE
+                        )
+                        st.success("✅ Mot de passe changé avec succès !\nL'administrateur a reçu le fichier users.json par email.")
                         st.rerun()
                     else:
                         st.error("❌ Les nouveaux mots de passe ne correspondent pas ou sont trop courts.")
@@ -128,9 +135,15 @@ if st.session_state.role == "Admin":
                 users = load_users()
                 users[new_email] = {"password": hash_password(temp_pw), "role": new_role, "name": new_name}
                 save_users(users)
-                st.success(f"✅ Utilisateur créé ! Mot de passe temporaire : **{temp_pw}**")
-                st.code(json.dumps(users, ensure_ascii=False, indent=2))
+                send_email(
+                    ADMIN_EMAIL,
+                    "🔄 Mise à jour users.json - Nouvel utilisateur créé",
+                    f"Nouvel utilisateur créé : {new_email} ({new_role})\nMot de passe temporaire : {temp_pw}\nVeuillez remplacer le fichier users.json sur GitHub avec la pièce jointe.",
+                    USERS_FILE
+                )
+                st.success(f"✅ Utilisateur {new_email} créé !\nL'administrateur a reçu le fichier users.json par email.")
 
+# ====================== RESTRICTIONS RÔLES ======================
 def can_access_capacity_nt():
     return st.session_state.role in ["NT", "Admin"]
 
@@ -526,7 +539,7 @@ def apply_month_headers(ws):
         cell.alignment = Alignment(horizontal="center", vertical="center")
     ws.row_dimensions[3].height = 30
 
-# ====================== STYLING FINAL (CENTRAGE CORRIGÉ) ======================
+# ====================== STYLING FINAL (WRAP_TEXT FIXÉ) ======================
 def apply_all_styling(wb):
     center_align = Alignment(horizontal="center", vertical="center")
     vertical_date = Alignment(horizontal="center", vertical="center", text_rotation=90)
@@ -538,7 +551,6 @@ def apply_all_styling(wb):
 
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
-        # CORRECTION : last_col forcé à 25 pour la feuille Description
         if sheet_name == "Description projet et engag. RL":
             last_col = 25
         elif sheet_name in ["Gantt Besoins", "Calendrier réel"]:
@@ -546,7 +558,7 @@ def apply_all_styling(wb):
         else:
             last_col = 25
 
-        # Centrage général (maintenant jusqu'à Y sur Description)
+        # Centrage général
         for row in ws.iter_rows(min_row=1, max_row=ws.max_row, min_col=1, max_col=last_col):
             for cell in row:
                 if cell.value is not None:
@@ -558,7 +570,7 @@ def apply_all_styling(wb):
                     ws.cell(4, c).alignment = vertical_date
             apply_month_headers(ws)
 
-        # === DESCRIPTION PROJET ET ENGAG. RL (CENTRAGE PARFAIT) ===
+        # === DESCRIPTION PROJET ET ENGAG. RL (FIX WRAP_TEXT LIGNE 5) ===
         if sheet_name == "Description projet et engag. RL":
             apply_thin_grid(ws, 5, ws.max_row, 1, 25)
             section_starts = [5, 9, 13, 17, 21]
@@ -578,15 +590,18 @@ def apply_all_styling(wb):
             for c in range(1, 26):
                 ws.cell(1, c).font = bold_font
                 ws.cell(2, c).font = bold_font
+
+            # FIX SPÉCIFIQUE : renvoi à la ligne + hauteur sur la ligne 5
             ws.row_dimensions[5].height = 80
             for c in range(1, 26):
-                ws.cell(5, c).font = bold_font
-                ws.cell(5, c).alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
+                cell = ws.cell(5, c)
+                cell.font = bold_font
+                cell.alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
-            # CENTRAGE FORCÉ DES COLONNES V, W, X ET Y (et toutes les autres)
+            # Centrage forcé sur toutes les lignes (y compris V à Y)
             for r in range(5, ws.max_row + 1):
                 for c in range(1, 26):
-                    ws.cell(r, c).alignment = center_align
+                    ws.cell(r, c).alignment = Alignment(horizontal="center", vertical="center")
 
         # === GANTT BESOINS ===
         elif sheet_name == "Gantt Besoins":
@@ -718,7 +733,7 @@ def update_rattrapage_sheet(wb):
         ws_rat.column_dimensions[get_column_letter(c)].width = 20
     ws_rat.freeze_panes = "B2"
 
-# ====================== INTERFACE ======================
+# ====================== INTERFACE STREAMLIT ======================
 st.title("Gestion Contrats RL - Calendrier & Calculateur")
 st.markdown(f"**Connecté en tant que : {st.session_state.email} ({st.session_state.role})**")
 
@@ -764,7 +779,7 @@ if uploaded_file:
         rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
         st.session_state.initial_rebuild_done = True
 
-    # 1. Ajouter un Projet (inchangé)
+    # 1. Ajouter un Projet
     st.subheader("1. Ajouter un Projet")
     new_proj = st.text_input("Nom du nouveau projet", key="new_proj")
     new_stat = st.selectbox("Statut initial", ["En soumission", "Contrat obtenu", "Abandonné"], key="new_stat")
@@ -805,7 +820,7 @@ if uploaded_file:
             st.success(f"✅ {new_proj} ajouté !")
             st.rerun()
 
-    # 2. Besoin projet approximatif (inchangé)
+    # 2. Besoin projet approximatif
     st.subheader("2. Besoin projet approximatif")
     selected_approx = st.selectbox("Projet", st.session_state.projects, key="approx_select")
     row_approx = find_project_row(ws_desc, selected_approx)
@@ -827,7 +842,7 @@ if uploaded_file:
             st.success("✅ Besoin approximatif + MAX NT + Dortoir auto enregistrés")
             st.rerun()
 
-    # 3. Modifier infos projet (inchangé)
+    # 3. Modifier infos projet
     st.subheader("3. Modifier infos projet existant")
     selected_edit = st.selectbox("Projet à modifier", st.session_state.projects, key="edit_select")
     row_edit = find_project_row(ws_desc, selected_edit)
@@ -1046,10 +1061,11 @@ if uploaded_file:
                         file_name=output_file,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
+                send_email(ADMIN_EMAIL, "Export mis à jour", "Voici la dernière version du fichier.", output_file)
                 send_to_all_users("Export mis à jour - Gestion Contrats RL/NT", "Voici la dernière version du fichier.", output_file)
             st.success("✅ Export terminé + envoyé par email à tous les utilisateurs !")
 
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ 100% terminé – Centrage parfait sur Description projet et engag. RL (colonnes V à Y inclus) !")
+st.caption("✅ 100% terminé – Renvoi à la ligne automatique restauré sur la ligne 5 de Description projet et engag. RL")
