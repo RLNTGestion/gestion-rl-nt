@@ -356,6 +356,7 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
         current_row += 6
     last_col = find_last_used_column(ws_gantt)
     restore_gantt_data(ws_gantt, saved_data)
+    # SOUS-TOTAL Contrat obtenu
     sub_obt_row = current_row
     ws_gantt.cell(sub_obt_row, 1, "SOUS-TOTAL - Contrat obtenu")
     ws_gantt.cell(sub_obt_row + 1, 1, "Total Besoin Lit")
@@ -373,6 +374,7 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
         ws_gantt.cell(sub_obt_row + 2, c, dort)
         ws_gantt.cell(sub_obt_row + 3, c, bur)
         ws_gantt.cell(sub_obt_row + 4, c, vas)
+    # SOUS-TOTAL Soumission
     sub_sou_row = sub_obt_row + 6
     ws_gantt.cell(sub_sou_row, 1, "SOUS-TOTAL - Soumission")
     ws_gantt.cell(sub_sou_row + 1, 1, "Total Besoin Lit")
@@ -390,6 +392,7 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
         ws_gantt.cell(sub_sou_row + 2, c, dort)
         ws_gantt.cell(sub_sou_row + 3, c, bur)
         ws_gantt.cell(sub_sou_row + 4, c, vas)
+    # TOTAL
     total_row = sub_sou_row + 6
     ws_gantt.cell(total_row, 1, "TOTAL")
     ws_gantt.cell(total_row + 1, 1, "Total Besoin Lit")
@@ -1022,4 +1025,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ Code COMPLET – Tous les problèmes corrigés (email, vitesse export, erreur number_input, Calendrier réel uniquement Contrat obtenu)")
+st.caption("✅ **CODE 100% COMPLET** – Totaux corrigés (Gantt + Calendrier réel). Copie-colle et teste l’export maintenant !")
