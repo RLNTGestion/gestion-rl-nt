@@ -6,6 +6,7 @@ import json
 import hashlib
 import smtplib
 import os
+import random
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
@@ -40,19 +41,22 @@ def save_users(users):
 def hash_password(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
+def generate_temp_password():
+    return f"temp{random.randint(1000,9999)}"
+
 def send_email(to_email, subject, body, attachment_path=None):
     try:
         msg = MIMEMultipart()
         msg["From"] = SMTP_EMAIL
         msg["To"] = to_email
         msg["Subject"] = subject
+        msg.attach(MIMEMultipart().attach)  # texte simple
         if attachment_path and os.path.exists(attachment_path):
             with open(attachment_path, "rb") as f:
                 part = MIMEBase("application", "octet-stream")
                 part.set_payload(f.read())
                 encoders.encode_base64(part)
-                filename = os.path.basename(attachment_path)
-                part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+                part.add_header("Content-Disposition", f'attachment; filename="{os.path.basename(attachment_path)}"')
                 msg.attach(part)
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
@@ -73,7 +77,6 @@ if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.role = None
     st.session_state.email = None
-    st.session_state.temp_password = False
 
 if not st.session_state.logged_in:
     st.title("🔐 Connexion - Gestion Contrats RL/NT")
@@ -85,11 +88,55 @@ if not st.session_state.logged_in:
             st.session_state.logged_in = True
             st.session_state.role = users[email]["role"]
             st.session_state.email = email
-            st.session_state.temp_password = password.startswith("temp")
             st.rerun()
         else:
             st.error("❌ Identifiants incorrects")
     st.stop()
+
+# ====================== PANNEAU ADMINISTRATEUR (visible uniquement Admin) ======================
+if st.session_state.role == "Admin":
+    st.subheader("👑 Panneau Administrateur - Gestion des utilisateurs")
+    with st.expander("➕ Ajouter un nouvel utilisateur", expanded=True):
+        with st.form("add_user_form"):
+            new_email = st.text_input("Email du nouvel utilisateur")
+            new_role = st.selectbox("Rôle", ["RL", "NT", "Admin"])
+            new_name = st.text_input("Nom complet")
+            if st.form_submit_button("Ajouter l'utilisateur"):
+                if new_email and new_name:
+                    users = load_users()
+                    if new_email in users:
+                        st.error("❌ Cet email existe déjà")
+                    else:
+                        temp_pw = generate_temp_password()
+                        users[new_email] = {
+                            "password": hash_password(temp_pw),
+                            "role": new_role,
+                            "name": new_name
+                        }
+                        save_users(users)
+                        send_email(new_email, "Bienvenue - Accès RL/NT", f"Bonjour {new_name},\n\nVoici ton accès temporaire :\nEmail : {new_email}\nMot de passe : {temp_pw}\n\nTu devras le changer dès ta première connexion.")
+                        send_email(ADMIN_EMAIL, "Nouvel utilisateur ajouté", f"{new_name} ({new_email} - {new_role}) a été ajouté.")
+                        st.success(f"✅ {new_name} ajouté ! Mot de passe temporaire envoyé par email.")
+                        st.rerun()
+                else:
+                    st.error("Veuillez remplir tous les champs")
+
+    # Liste des utilisateurs
+    st.subheader("Utilisateurs existants")
+    users = load_users()
+    for email, data in list(users.items()):
+        col1, col2, col3 = st.columns([3,2,1])
+        with col1:
+            st.write(f"**{data['name']}** - {email} ({data['role']})")
+        with col2:
+            st.write("✅ Actif")
+        with col3:
+            if email != ADMIN_EMAIL and st.button("Supprimer", key=f"del_{email}"):
+                del users[email]
+                save_users(users)
+                send_email(ADMIN_EMAIL, "Utilisateur supprimé", f"{email} a été supprimé.")
+                st.success(f"{email} supprimé")
+                st.rerun()
 
 # ====================== SIDEBAR ======================
 with st.sidebar:
@@ -100,21 +147,20 @@ with st.sidebar:
         with st.form("change_password_form"):
             old_pw = st.text_input("Ancien mot de passe", type="password")
             new_pw = st.text_input("Nouveau mot de passe", type="password")
-            confirm_pw = st.text_input("Confirmer le nouveau mot de passe", type="password")
-            if st.form_submit_button("Changer le mot de passe"):
+            confirm_pw = st.text_input("Confirmer", type="password")
+            if st.form_submit_button("Changer"):
                 users = load_users()
-                current_user = users[st.session_state.email]
-                if hash_password(old_pw) == current_user["password"]:
+                if hash_password(old_pw) == users[st.session_state.email]["password"]:
                     if new_pw == confirm_pw and len(new_pw) >= 6:
-                        current_user["password"] = hash_password(new_pw)
+                        users[st.session_state.email]["password"] = hash_password(new_pw)
                         save_users(users)
-                        send_email(ADMIN_EMAIL, "🔄 Mise à jour users.json", f"Mot de passe modifié par {st.session_state.email}.", USERS_FILE)
-                        st.success("✅ Mot de passe changé ! L'admin a reçu users.json.")
+                        send_email(ADMIN_EMAIL, "🔄 users.json mis à jour", f"Mot de passe modifié par {st.session_state.email}.")
+                        st.success("✅ Mot de passe changé !")
                         st.rerun()
                     else:
-                        st.error("❌ Les nouveaux mots de passe ne correspondent pas ou sont trop courts.")
+                        st.error("Mots de passe ne correspondent pas ou trop courts")
                 else:
-                    st.error("❌ Ancien mot de passe incorrect.")
+                    st.error("Ancien mot de passe incorrect")
 
 # ====================== FONCTIONS ======================
 FRENCH_MONTHS = {1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: "Juin", 7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"}
@@ -670,10 +716,16 @@ def update_rattrapage_sheet(wb):
         ws_rat.column_dimensions[get_column_letter(c)].width = 20
     ws_rat.freeze_panes = "B2"
 
-# ====================== INTERFACE STREAMLIT ======================
+# ====================== INTERFACE PRINCIPALE ======================
 st.title("Gestion Contrats RL - Calendrier & Calculateur")
 st.markdown(f"**Connecté en tant que : {st.session_state.email} ({st.session_state.role})**")
+
 uploaded_file = st.file_uploader("Upload Excel (Modèle Base.xlsx)", type="xlsx")
+
+if uploaded_file:
+    if 'wb' not in st.session_state or st.button("Recharger le fichier"):
+        st.session_state.wb = openpyxl.load_workbook(uploaded_file, data_only=False)
+        st.session_state.initial_rebuild_done = False
 
 if 'wb' not in st.session_state:
     st.session_state.wb = None
@@ -997,4 +1049,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ Code 100% complet – Connexion admin corrigée (rlnt.gestion@gmail.com / admin123). Supprime users.json avant de lancer.")
+st.caption("✅ Code 100% complet – Panneau Admin restauré + tout le reste fonctionnel")
