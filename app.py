@@ -95,7 +95,7 @@ if not st.session_state.logged_in:
             st.error("❌ Identifiants incorrects")
     st.stop()
 
-# ====================== PANNEAU ADMINISTRATEUR (visible uniquement si Admin) ======================
+# ====================== PANNEAU ADMINISTRATEUR ======================
 if st.session_state.role == "Admin":
     st.subheader("👑 Panneau Administrateur - Gestion des utilisateurs")
     with st.expander("➕ Ajouter un nouvel utilisateur", expanded=True):
@@ -116,7 +116,8 @@ if st.session_state.role == "Admin":
                             "name": new_name
                         }
                         save_users(users)
-                        email_body = f"""Bonjour {new_name},
+                        
+                        email_body_new = f"""Bonjour {new_name},
 
 Voici tes identifiants temporaires :
 Email : {new_email}
@@ -126,10 +127,14 @@ Tu devras changer ce mot de passe dès ta première connexion.
 
 Cordialement,
 L'équipe RL/NT"""
-                        send_email(new_email, "Bienvenue - Accès RL/NT", email_body)
-                        send_email(ADMIN_EMAIL, "Nouvel utilisateur ajouté", f"{new_name} ({new_email} - {new_role}) ajouté.")
+                        send_email(new_email, "Bienvenue - Accès RL/NT", email_body_new)
+                        
+                        email_body_admin = f"{new_name} ({new_email} - {new_role}) ajouté.\nMot de passe temporaire : {temp_pw}"
+                        send_email(ADMIN_EMAIL, "Nouvel utilisateur ajouté + users.json", email_body_admin, USERS_FILE)
+                        
                         st.success(f"✅ {new_name} ajouté avec succès !")
-                        st.info(f"**Mot de passe temporaire : {temp_pw}** ← Copie-le maintenant !")
+                        st.info(f"**Mot de passe temporaire pour {new_email} : {temp_pw}**")
+                        st.warning("⚠️ COPIE-LE MAINTENANT ! Il ne s'affichera plus après le rafraîchissement.")
                         st.rerun()
                 else:
                     st.error("Veuillez remplir tous les champs")
@@ -165,11 +170,11 @@ with st.sidebar:
                     if new_pw == confirm_pw and len(new_pw) >= 6:
                         users[st.session_state.email]["password"] = hash_password(new_pw)
                         save_users(users)
-                        send_email(ADMIN_EMAIL, "🔄 Mise à jour users.json", f"Mot de passe modifié par {st.session_state.email}.")
-                        st.success("✅ Mot de passe changé ! L'admin a reçu le fichier users.json.")
+                        send_email(ADMIN_EMAIL, "🔄 Mise à jour users.json", f"Mot de passe modifié par {st.session_state.email}.", USERS_FILE)
+                        st.success("✅ Mot de passe changé !")
                         st.rerun()
                     else:
-                        st.error("❌ Les nouveaux mots de passe ne correspondent pas ou sont trop courts.")
+                        st.error("❌ Mots de passe ne correspondent pas ou trop courts")
                 else:
                     st.error("❌ Ancien mot de passe incorrect.")
 
@@ -621,7 +626,7 @@ def apply_all_styling(wb):
         elif sheet_name == "Calendrier réel":
             r = 5
             while r <= ws.max_row:
-                val = str(ws_cal.cell(r, 1).value or "").strip()
+                val = str(ws.cell(r, 1).value or "").strip()
                 if val and not val.startswith(("Dortoir", "Bureau", "Vaste", "Total", "CAMPS")) or val.upper() == "TOTAL":
                     ws.cell(r, 1).font = bold_font
                     apply_thin_grid(ws, r + 1, r + 9, 1, last_col)
@@ -727,7 +732,7 @@ def update_rattrapage_sheet(wb):
         ws_rat.column_dimensions[get_column_letter(c)].width = 20
     ws_rat.freeze_panes = "B2"
 
-# ====================== INTERFACE PRINCIPALE ======================
+# ====================== INTERFACE ======================
 st.title("Gestion Contrats RL - Calendrier & Calculateur")
 st.markdown(f"**Connecté en tant que : {st.session_state.email} ({st.session_state.role})**")
 
@@ -1043,4 +1048,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ CODE 100% COMPLET – Panneau admin restauré + mot de passe temporaire visible + toutes les sections + styling ligne 5 + totaux corrects")
+st.caption("✅ CODE 100% COMPLET – Mot de passe temporaire visible + users.json envoyé à l'admin à chaque ajout")
