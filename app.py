@@ -22,7 +22,7 @@ SMTP_PASSWORD = st.secrets["smtp"]["password"]
 ADMIN_EMAIL = "rlnt.gestion@gmail.com"
 USERS_FILE = "users.json"
 
-# ====================== USERS (ROBUSTE POUR CLOUD) ======================
+# ====================== USERS ======================
 def load_users():
     default_admin = {
         ADMIN_EMAIL: {
@@ -47,7 +47,7 @@ def save_users(users):
             json.dump(users, f, ensure_ascii=False, indent=2)
         return True
     except:
-        st.error("Impossible de sauvegarder users.json (disque temporaire sur Streamlit Cloud)")
+        st.error("Impossible de sauvegarder users.json")
         return False
 
 def hash_password(pw):
@@ -132,19 +132,14 @@ if st.session_state.role == "Admin":
             users = load_users()
             if new_email and new_email not in users:
                 temp_pw = "temp" + hashlib.sha256(str(datetime.now()).encode()).hexdigest()[:8]
-                users[new_email] = {
-                    "password": hash_password(temp_pw),
-                    "role": new_role,
-                    "name": new_name or new_email.split("@")[0]
-                }
+                users[new_email] = {"password": hash_password(temp_pw), "role": new_role, "name": new_name or new_email.split("@")[0]}
                 save_users(users)
-                send_email(new_email, "Bienvenue - Gestion Contrats RL/NT",
-                           f"Email : {new_email}\nMot de passe temporaire : {temp_pw}\nChange-le immédiatement !")
+                send_email(new_email, "Bienvenue - Gestion Contrats RL/NT", f"Email : {new_email}\nMot de passe temporaire : {temp_pw}\nChange-le immédiatement !")
                 st.success(f"✅ {new_email} créé ! Mot de passe temporaire envoyé.")
                 st.rerun()
 
         st.divider()
-        st.subheader("💾 Sauvegarde & Restauration (OBLIGATOIRE sur Cloud)")
+        st.subheader("💾 Sauvegarde & Restauration")
         col1, col2, col3 = st.columns(3)
         with col1:
             if st.button("📥 Télécharger users.json actuel"):
@@ -173,14 +168,17 @@ if st.session_state.role == "Admin":
         delete_options = [e for e in users.keys() if e != ADMIN_EMAIL]
         if delete_options:
             delete_email = st.selectbox("Choisis l'utilisateur à supprimer", delete_options, key="delete_select")
-            if st.button("🗑️ Supprimer cet utilisateur", type="primary"):
-                if st.checkbox(f"Confirmer la suppression définitive de {delete_email} ?", key="confirm_del"):
+            confirm = st.checkbox(f"✅ Confirmer la suppression définitive de **{delete_email}** ?", key=f"confirm_delete_{delete_email}")
+            if confirm:
+                if st.button("🗑️ SUPPRIMER DÉFINITIVEMENT", type="primary"):
                     del users[delete_email]
                     save_users(users)
-                    st.success(f"{delete_email} supprimé !")
+                    st.success(f"✅ {delete_email} supprimé !")
                     st.rerun()
+            else:
+                st.info("Coche la case ci-dessus pour activer le bouton.")
         else:
-            st.info("Aucun utilisateur à supprimer (sauf l'admin principal).")
+            st.info("Aucun utilisateur à supprimer.")
 
         st.divider()
         st.subheader("Utilisateurs actuels")
@@ -196,46 +194,31 @@ def can_access_engagement_rl():
     return st.session_state.role in ["RL", "Admin"]
 
 # ====================== FONCTIONS ======================
-FRENCH_MONTHS = {
-    1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril",
-    5: "Mai", 6: "Juin", 7: "Juillet", 8: "Août",
-    9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"
-}
+FRENCH_MONTHS = {1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: "Juin", 7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"}
 
 def safe_float(val):
-    if val is None:
-        return 0.0
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return 0.0
+    if val is None: return 0.0
+    try: return float(val)
+    except: return 0.0
 
 def get_previous_monday():
     today = datetime.today().date()
     return today - timedelta(days=today.weekday())
 
 def normalize_date(d):
-    if isinstance(d, datetime):
-        return d.date()
-    elif isinstance(d, date):
-        return d
+    if isinstance(d, datetime): return d.date()
+    elif isinstance(d, date): return d
     elif isinstance(d, (int, float)) and d > 40000:
-        try:
-            return (datetime(1899, 12, 30) + timedelta(days=int(d))).date()
-        except:
-            return None
+        try: return (datetime(1899, 12, 30) + timedelta(days=int(d))).date()
+        except: return None
     elif isinstance(d, str):
-        try:
-            return datetime.strptime(d[:10], "%Y-%m-%d").date()
-        except:
-            return None
+        try: return datetime.strptime(d[:10], "%Y-%m-%d").date()
+        except: return None
     return None
 
 def get_monday_of_week(selected_date):
-    if isinstance(selected_date, datetime):
-        d = selected_date.date()
-    else:
-        d = selected_date
+    if isinstance(selected_date, datetime): d = selected_date.date()
+    else: d = selected_date
     return d - timedelta(days=d.weekday())
 
 def find_project_row(ws, project_name, start_row=3):
@@ -249,7 +232,7 @@ def find_project_row(ws, project_name, start_row=3):
 def safe_get_row(ws, project_name):
     row = find_project_row(ws, project_name)
     if row is None:
-        st.error(f"❌ Projet **{project_name}** introuvable dans la feuille Description projet et engag. RL !")
+        st.error(f"❌ Projet **{project_name}** introuvable dans la feuille Description !")
         st.stop()
     return row
 
@@ -282,8 +265,7 @@ def find_last_filled_column(ws_cal, proj_row, before_col):
     return None
 
 def backfill_intermediate_weeks(ws_cal, proj_row, last_col, new_col):
-    if not last_col or new_col <= last_col + 1:
-        return
+    if not last_col or new_col <= last_col + 1: return
     for c in range(last_col + 1, new_col):
         for offset in range(1, 10):
             ws_cal.cell(proj_row + offset, c, ws_cal.cell(proj_row + offset, last_col).value)
@@ -434,6 +416,7 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
         current_row += 6
     last_col = find_last_used_column(ws_gantt)
     restore_gantt_data(ws_gantt, saved_data)
+    # SOUS-TOTAL Contrat obtenu
     sub_obt_row = current_row
     ws_gantt.cell(sub_obt_row, 1, "SOUS-TOTAL - Contrat obtenu")
     ws_gantt.cell(sub_obt_row + 1, 1, "Total Besoin Lit")
@@ -451,6 +434,7 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
         ws_gantt.cell(sub_obt_row + 2, c, dort)
         ws_gantt.cell(sub_obt_row + 3, c, bur)
         ws_gantt.cell(sub_obt_row + 4, c, vas)
+    # SOUS-TOTAL Soumission
     sub_sou_row = sub_obt_row + 6
     ws_gantt.cell(sub_sou_row, 1, "SOUS-TOTAL - Soumission")
     ws_gantt.cell(sub_sou_row + 1, 1, "Total Besoin Lit")
@@ -468,6 +452,7 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
         ws_gantt.cell(sub_sou_row + 2, c, dort)
         ws_gantt.cell(sub_sou_row + 3, c, bur)
         ws_gantt.cell(sub_sou_row + 4, c, vas)
+    # TOTAL
     total_row = sub_sou_row + 6
     ws_gantt.cell(total_row, 1, "TOTAL")
     ws_gantt.cell(total_row + 1, 1, "Total Besoin Lit")
@@ -656,10 +641,10 @@ def apply_all_styling(wb):
                 val = str(ws.cell(r, 1).value or "").strip()
                 if val and not val.startswith(("Besoin", "CAMPS")) or "SOUS-TOTAL" in val.upper() or val.upper() == "TOTAL":
                     ws.cell(r, 1).font = bold_font
-                    apply_thin_grid(ws, r + 1, r + 4, 1, last_col)
-                    for c in range(1, last_col + 1):
+                    apply_thin_grid(ws, r + 1, r + 4, 1, find_last_used_column(ws))
+                    for c in range(1, find_last_used_column(ws) + 1):
                         ws.cell(r, c).border = Border(bottom=thick_side)
-                    for c in range(1, last_col + 1):
+                    for c in range(1, find_last_used_column(ws) + 1):
                         ws.cell(r + 4, c).border = create_combined_border(bottom_thick=True)
                     r += 6
                     continue
@@ -670,18 +655,18 @@ def apply_all_styling(wb):
                 val = str(ws.cell(r, 1).value or "").strip()
                 if val and not val.startswith(("Dortoir", "Bureau", "Vaste", "Total", "CAMPS")) or val.upper() == "TOTAL":
                     ws.cell(r, 1).font = bold_font
-                    apply_thin_grid(ws, r + 1, r + 9, 1, last_col)
-                    for c in range(1, last_col + 1):
+                    apply_thin_grid(ws, r + 1, r + 9, 1, find_last_used_column(ws))
+                    for c in range(1, find_last_used_column(ws) + 1):
                         ws.cell(r, c).border = Border(bottom=thick_side)
-                    for c in range(1, last_col + 1):
-                        ws.cell(r + 4, c).border = Border(top=thick_side, bottom=thick_side, left=thin_side, right=thin_side)
-                    for c in range(1, last_col + 1):
-                        ws.cell(r + 8, c).border = Border(top=thick_side, bottom=thick_side, left=thin_side, right=thin_side)
-                    for c in range(1, last_col + 1):
+                    for c in range(1, find_last_used_column(ws) + 1):
+                        ws.cell(r + 4, c).border = Border(top=thick_side, bottom=thick_side)
+                    for c in range(1, find_last_used_column(ws) + 1):
+                        ws.cell(r + 8, c).border = Border(top=thick_side, bottom=thick_side)
+                    for c in range(1, find_last_used_column(ws) + 1):
                         ws.cell(r + 9, c).border = create_combined_border(bottom_thick=True)
                     for offset in [4, 8, 9]:
                         ws.cell(r + offset, 1).font = bold_font
-                        for c in range(2, last_col + 1):
+                        for c in range(2, find_last_used_column(ws) + 1):
                             ws.cell(r + offset, c).font = bold_font
                     r += 11
                     continue
@@ -870,40 +855,38 @@ if uploaded_file:
     bur_approx = st.number_input("Besoin module bureau approx", value=safe_float(ws_desc.cell(row_approx, 7).value), min_value=0.0, key=f"bur_approx_{selected_approx}")
     vas_approx = st.number_input("Besoin module vaste approx", value=safe_float(ws_desc.cell(row_approx, 8).value), min_value=0.0, key=f"vas_approx_{selected_approx}")
     if st.button("Enregistrer Besoin approximatif"):
-        if row_approx:
-            ws_desc.cell(row_approx, 5, lit_approx)
-            dort_auto = math.ceil(lit_approx / 5.5) if lit_approx > 0 else 0
-            ws_desc.cell(row_approx, 6, dort_auto)
-            ws_desc.cell(row_approx, 7, bur_approx)
-            ws_desc.cell(row_approx, 8, vas_approx)
-            ws_desc.cell(row_approx, 9, math.floor(lit_approx * 0.3))
-            ws_desc.cell(row_approx, 10, math.floor(dort_auto * 0.3))
-            ws_desc.cell(row_approx, 11, math.floor(bur_approx * 0.3))
-            ws_desc.cell(row_approx, 12, math.floor(vas_approx * 0.3))
-            st.success("✅ Besoin approximatif + MAX NT + Dortoir auto enregistrés")
-            st.rerun()
+        ws_desc.cell(row_approx, 5, lit_approx)
+        dort_auto = math.ceil(lit_approx / 5.5) if lit_approx > 0 else 0
+        ws_desc.cell(row_approx, 6, dort_auto)
+        ws_desc.cell(row_approx, 7, bur_approx)
+        ws_desc.cell(row_approx, 8, vas_approx)
+        ws_desc.cell(row_approx, 9, math.floor(lit_approx * 0.3))
+        ws_desc.cell(row_approx, 10, math.floor(dort_auto * 0.3))
+        ws_desc.cell(row_approx, 11, math.floor(bur_approx * 0.3))
+        ws_desc.cell(row_approx, 12, math.floor(vas_approx * 0.3))
+        st.success("✅ Besoin approximatif + MAX NT + Dortoir auto enregistrés")
+        st.rerun()
 
     # ====================== 3. MODIFIER INFOS PROJET ======================
     st.subheader("3. Modifier infos projet existant")
     selected_edit = st.selectbox("Projet à modifier", st.session_state.projects, key="edit_select")
     row_edit = safe_get_row(ws_desc, selected_edit)
-    if row_edit:
-        current_stat = str(ws_desc.cell(row_edit, 2).value or "En soumission")
-        stat_options = ["En soumission", "Contrat obtenu", "Abandonné"]
-        index_stat = stat_options.index(current_stat) if current_stat in stat_options else 0
-        new_stat_edit = st.selectbox("Nouveau statut", stat_options, index=index_stat, key=f"stat_edit_{selected_edit}")
-        current_date_sou = normalize_date(ws_desc.cell(row_edit, 3).value) or datetime(2025, 12, 12).date()
-        new_date_soumission = st.date_input("Nouvelle date soumission", value=current_date_sou, key=f"date_soumission_edit_{selected_edit}")
-        current_date_obt = normalize_date(ws_desc.cell(row_edit, 4).value) or datetime(2026, 1, 16).date()
-        new_date_obtention = st.date_input("Nouvelle date obtention", value=current_date_obt, key=f"date_obtention_edit_{selected_edit}")
-        if st.button("Enregistrer modification infos projet"):
-            ws_desc.cell(row_edit, 2, new_stat_edit)
-            ws_desc.cell(row_edit, 3, new_date_soumission)
-            ws_desc.cell(row_edit, 4, new_date_obtention)
-            rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
-            rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
-            st.success(f"✅ Infos de {selected_edit} mises à jour")
-            st.rerun()
+    current_stat = str(ws_desc.cell(row_edit, 2).value or "En soumission")
+    stat_options = ["En soumission", "Contrat obtenu", "Abandonné"]
+    index_stat = stat_options.index(current_stat) if current_stat in stat_options else 0
+    new_stat_edit = st.selectbox("Nouveau statut", stat_options, index=index_stat, key=f"stat_edit_{selected_edit}")
+    current_date_sou = normalize_date(ws_desc.cell(row_edit, 3).value) or datetime(2025, 12, 12).date()
+    new_date_soumission = st.date_input("Nouvelle date soumission", value=current_date_sou, key=f"date_soumission_edit_{selected_edit}")
+    current_date_obt = normalize_date(ws_desc.cell(row_edit, 4).value) or datetime(2026, 1, 16).date()
+    new_date_obtention = st.date_input("Nouvelle date obtention", value=current_date_obt, key=f"date_obtention_edit_{selected_edit}")
+    if st.button("Enregistrer modification infos projet"):
+        ws_desc.cell(row_edit, 2, new_stat_edit)
+        ws_desc.cell(row_edit, 3, new_date_soumission)
+        ws_desc.cell(row_edit, 4, new_date_obtention)
+        rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
+        rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
+        st.success(f"✅ Infos de {selected_edit} mises à jour")
+        st.rerun()
 
     # ====================== 4. CAPACITÉ NT ======================
     st.subheader("4. Capacité NT")
@@ -986,8 +969,15 @@ if uploaded_file:
                     ws_gantt.cell(proj_row + 2, col, dortoir)
                     ws_gantt.cell(proj_row + 3, col, bureau)
                     ws_gantt.cell(proj_row + 4, col, vaste)
+            rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)   # ← FIX IMPORTANT
             st.success(f"Période appliquée pour {selected_period}")
             st.rerun()
+
+    # ====================== BOUTON RECALCUL TOTAL ======================
+    if st.button("🔄 Recalculer tous les totaux Gantt", type="primary"):
+        rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
+        st.success("✅ Totaux et sous-totaux recalculés avec succès !")
+        st.rerun()
 
     # ====================== VÉRIFICATION GAPS ======================
     st.subheader("Vérification des semaines vides dans Gantt Besoins")
@@ -1097,4 +1087,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ **Code complet & corrigé** – Suppression utilisateurs + crash NoneType totalement résolus. Copie-colle tout et redéploie.")
+st.caption("✅ **TOTAUX & SOUS-TOTAUX RÉPARÉS** – Copie-colle tout le code ci-dessus et redéploie. Les totaux se recalculent automatiquement après chaque saisie période + bouton manuel disponible.")
