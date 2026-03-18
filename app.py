@@ -22,7 +22,7 @@ SMTP_EMAIL = "rlnt.gestion@gmail.com"
 SMTP_PASSWORD = st.secrets["smtp"]["password"]
 ADMIN_EMAIL = "rlnt.gestion@gmail.com"
 USERS_FILE = "users.json"
-APP_URL = "https://ton-app.streamlit.app"   # ←←← CHANGE ÇA AVEC TON VRAI LIEN !
+APP_URL = "https://gestion-rl-nt.streamlit.app/"   # ←←← CHANGE ÇA AVEC TON VRAI LIEN !
 
 def load_users():
     if os.path.exists(USERS_FILE):
