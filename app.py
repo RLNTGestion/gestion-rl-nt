@@ -14,7 +14,7 @@ from openpyxl.styles import Font, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from zoneinfo import ZoneInfo
 
-# ====================== CONFIG EMAIL ======================
+# ====================== CONFIG ======================
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 SMTP_EMAIL = "rlnt.gestion@gmail.com"
@@ -22,39 +22,33 @@ SMTP_PASSWORD = st.secrets["smtp"]["password"]
 ADMIN_EMAIL = "rlnt.gestion@gmail.com"
 USERS_FILE = "users.json"
 
-# ====================== USERS MANAGEMENT (CORRIGÉ & ROBUSTE) ======================
+# ====================== USERS (ROBUSTE POUR CLOUD) ======================
 def load_users():
-    """Version ultra-robuste : l'admin rlnt.gestion@gmail.com / admin123 est TOUJOURS garanti"""
+    """Force toujours l'admin principal + charge le fichier s'il existe"""
+    default_admin = {
+        ADMIN_EMAIL: {
+            "password": hashlib.sha256("admin123".encode()).hexdigest(),
+            "role": "Admin",
+            "name": "Administrateur Principal"
+        }
+    }
     if os.path.exists(USERS_FILE):
         try:
             with open(USERS_FILE, "r", encoding="utf-8") as f:
                 users = json.load(f)
-        except Exception as e:
-            st.error(f"Erreur lecture users.json (corrompu ?) → recréation admin : {e}")
-            users = {}
-    else:
-        users = {}
-
-    # FORCE ADMIN PRINCIPAL (résout le problème "accès admin ne fonctionne plus")
-    if ADMIN_EMAIL not in users or users[ADMIN_EMAIL].get("role") != "Admin":
-        default_pw = hashlib.sha256("admin123".encode()).hexdigest()
-        users[ADMIN_EMAIL] = {
-            "password": default_pw,
-            "role": "Admin",
-            "name": "Administrateur Principal"
-        }
-        save_users(users)
-        st.sidebar.success("✅ Compte Admin principal recréé automatiquement")
-
-    return users
+            users[ADMIN_EMAIL] = default_admin[ADMIN_EMAIL]  # force admin
+            return users
+        except:
+            return default_admin
+    return default_admin
 
 def save_users(users):
     try:
         with open(USERS_FILE, "w", encoding="utf-8") as f:
             json.dump(users, f, ensure_ascii=False, indent=2)
         return True
-    except Exception as e:
-        st.error(f"Impossible de sauvegarder users.json : {e}")
+    except:
+        st.error("Impossible de sauvegarder (disque temporaire sur Cloud)")
         return False
 
 def hash_password(pw):
@@ -67,28 +61,21 @@ def send_email(to_email, subject, body, attachment_path=None):
         msg["To"] = to_email
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
-
         if attachment_path and os.path.exists(attachment_path):
             with open(attachment_path, "rb") as f:
                 part = MIMEBase("application", "octet-stream")
                 part.set_payload(f.read())
                 encoders.encode_base64(part)
-                filename = os.path.basename(attachment_path)
-                part.add_header("Content-Disposition", f'attachment; filename="{filename}"')
+                part.add_header("Content-Disposition", f'attachment; filename="{os.path.basename(attachment_path)}"')
                 msg.attach(part)
-
         server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
         server.starttls()
         server.login(SMTP_EMAIL, SMTP_PASSWORD)
         server.sendmail(SMTP_EMAIL, to_email, msg.as_string())
         server.quit()
         return True
-    except Exception as e:
-        st.error(f"Erreur envoi email : {e}")
+    except:
         return False
-
-def notify_admin(message):
-    send_email(ADMIN_EMAIL, "🔴 Nouvelle connexion RL/NT", message)
 
 # ====================== LOGIN ======================
 if "logged_in" not in st.session_state:
@@ -107,8 +94,6 @@ if not st.session_state.logged_in:
             st.session_state.logged_in = True
             st.session_state.role = users[email]["role"]
             st.session_state.email = email
-            if email != ADMIN_EMAIL:
-                notify_admin(f"{email} ({users[email]['role']}) connecté")
             st.rerun()
         else:
             st.error("❌ Identifiants incorrects")
@@ -119,34 +104,31 @@ with st.sidebar:
     st.header("🔑 Mon compte")
     st.write(f"Connecté : **{st.session_state.email}**")
     st.write(f"Rôle : **{st.session_state.role}**")
-    
     with st.expander("Changer mon mot de passe"):
         with st.form("change_password_form"):
             old_pw = st.text_input("Ancien mot de passe", type="password")
             new_pw = st.text_input("Nouveau mot de passe", type="password")
-            confirm_pw = st.text_input("Confirmer le nouveau mot de passe", type="password")
-            if st.form_submit_button("Changer le mot de passe"):
+            confirm_pw = st.text_input("Confirmer", type="password")
+            if st.form_submit_button("Changer"):
                 users = load_users()
-                current_user = users[st.session_state.email]
-                if hash_password(old_pw) == current_user["password"]:
+                if hash_password(old_pw) == users[st.session_state.email]["password"]:
                     if new_pw == confirm_pw and len(new_pw) >= 6:
-                        current_user["password"] = hash_password(new_pw)
+                        users[st.session_state.email]["password"] = hash_password(new_pw)
                         save_users(users)
-                        st.success("✅ Mot de passe changé ! L'admin a été notifié.")
+                        st.success("✅ Mot de passe changé !")
                         st.rerun()
                     else:
-                        st.error("❌ Les nouveaux mots de passe ne correspondent pas ou sont trop courts.")
+                        st.error("❌ Mots de passe incorrects")
                 else:
                     st.error("❌ Ancien mot de passe incorrect.")
 
-# ====================== ADMIN PANEL (CORRIGÉ & AMÉLIORÉ) ======================
+# ====================== ADMIN PANEL (CORRIGÉ POUR CLOUD) ======================
 if st.session_state.role == "Admin":
     with st.expander("👤 Gestion des utilisateurs (Admin uniquement)", expanded=True):
         st.subheader("Créer un nouvel utilisateur")
         new_email = st.text_input("Email du nouvel utilisateur")
         new_name = st.text_input("Nom complet")
         new_role = st.selectbox("Rôle", ["RL", "NT", "Admin"])
-        
         if st.button("Créer + générer mot de passe temporaire", type="primary"):
             users = load_users()
             if new_email and new_email not in users:
@@ -157,34 +139,40 @@ if st.session_state.role == "Admin":
                     "name": new_name or new_email.split("@")[0]
                 }
                 save_users(users)
-                
-                # ENVOI AU NOUVEL UTILISATEUR (bug corrigé)
                 send_email(new_email, "Bienvenue - Gestion Contrats RL/NT",
-                           f"Bonjour {new_name or ''},\n\nTon compte a été créé.\nEmail : {new_email}\nMot de passe temporaire : {temp_pw}\n\nChange-le dès la première connexion !")
-                
-                # Notification admin
-                send_email(ADMIN_EMAIL, "Nouvel utilisateur créé", 
-                           f"Email : {new_email}\nRôle : {new_role}\nMDP temp : {temp_pw}")
-                
-                st.success(f"✅ Utilisateur **{new_email}** créé !")
-                st.info(f"**Mot de passe temporaire : `{temp_pw}`** (envoyé par email au nouvel utilisateur)")
+                           f"Email : {new_email}\nMot de passe temporaire : {temp_pw}\nChange-le immédiatement !")
+                st.success(f"✅ {new_email} créé ! Mot de passe temporaire envoyé.")
                 st.rerun()
-            else:
-                st.error("❌ Email vide ou déjà existant")
 
         st.divider()
-        st.subheader("Utilisateurs existants")
+        st.subheader("💾 Sauvegarde & Restauration (IMPORTANT pour Streamlit Cloud)")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("📥 Télécharger users.json actuel"):
+                users = load_users()
+                with open(USERS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(users, f, ensure_ascii=False, indent=2)
+                with open(USERS_FILE, "rb") as f:
+                    st.download_button("Clique ici pour télécharger", f, file_name="users.json", mime="application/json")
+        with col2:
+            uploaded_backup = st.file_uploader("📤 Uploader une sauvegarde users.json", type="json")
+            if uploaded_backup is not None:
+                with open(USERS_FILE, "wb") as f:
+                    f.write(uploaded_backup.getbuffer())
+                st.success("✅ Sauvegarde restaurée ! Recharge la page.")
+                st.rerun()
+        with col3:
+            if st.button("🗑️ Réinitialiser complètement tous les utilisateurs", type="primary"):
+                if os.path.exists(USERS_FILE):
+                    os.remove(USERS_FILE)
+                st.success("✅ Tous les utilisateurs supprimés (sauf admin principal). Recharge la page.")
+                st.rerun()
+
+        st.divider()
+        st.subheader("Utilisateurs actuels")
         users = load_users()
         for email, data in users.items():
-            with st.expander(f"{data.get('name', email)} — {email} ({data['role']})"):
-                st.write(f"**Email** : {email}")
-                st.write(f"**Rôle** : {data['role']}")
-                if email != ADMIN_EMAIL and st.button("Supprimer cet utilisateur", key=f"del_{email}"):
-                    if st.checkbox(f"Confirmer suppression de {email} ?", key=f"conf_{email}"):
-                        del users[email]
-                        save_users(users)
-                        st.success(f"{email} supprimé")
-                        st.rerun()
+            st.write(f"• **{email}** → {data.get('role')} ({data.get('name', '')})")
 
 # ====================== RESTRICTIONS RÔLES ======================
 def can_access_capacity_nt():
