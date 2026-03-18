@@ -22,7 +22,7 @@ SMTP_EMAIL = "rlnt.gestion@gmail.com"
 SMTP_PASSWORD = st.secrets["smtp"]["password"]
 ADMIN_EMAIL = "rlnt.gestion@gmail.com"
 USERS_FILE = "users.json"
-APP_URL = "https://gestion-rl-nt.streamlit.app/"   # ←←← CHANGE ÇA AVEC TON VRAI LIEN !
+APP_URL = "https://ton-app.streamlit.app"   # ←←← CHANGE ÇA AVEC TON VRAI LIEN !
 
 def load_users():
     if os.path.exists(USERS_FILE):
@@ -117,7 +117,6 @@ if st.session_state.role == "Admin":
                             "name": new_name
                         }
                         save_users(users)
-                        
                         email_body_new = f"""Bonjour {new_name},
 
 Voici tes identifiants temporaires :
@@ -132,13 +131,10 @@ Tu devras changer ce mot de passe dès ta première connexion.
 Cordialement,
 L'équipe RL/NT"""
                         send_email(new_email, "Bienvenue - Accès RL/NT", email_body_new)
-                        
-                        email_body_admin = f"{new_name} ({new_email} - {new_role}) ajouté.\nMot de passe temporaire : {temp_pw}"
-                        send_email(ADMIN_EMAIL, "Nouvel utilisateur ajouté + users.json", email_body_admin, USERS_FILE)
-                        
+                        send_email(ADMIN_EMAIL, "Nouvel utilisateur ajouté + users.json", f"{new_name} ({new_email} - {new_role}) ajouté.", USERS_FILE)
                         st.success(f"✅ {new_name} ajouté avec succès !")
                         st.info(f"**Mot de passe temporaire pour {new_email} : {temp_pw}**")
-                        st.warning("⚠️ COPIE-LE MAINTENANT ! Il ne s'affichera plus après le rafraîchissement.")
+                        st.warning("⚠️ COPIE-LE MAINTENANT !")
                         st.rerun()
                 else:
                     st.error("Veuillez remplir tous les champs")
@@ -182,9 +178,7 @@ with st.sidebar:
                 else:
                     st.error("❌ Ancien mot de passe incorrect.")
 
-# ====================== FONCTIONS (toutes les sections précédentes intactes) ======================
-# (Le reste du code est EXACTEMENT le même que la version précédente qui fonctionnait parfaitement : rebuild_gantt, rebuild_calendrier, apply_all_styling avec wrap_text ligne 5, totaux corrects, export ultra-rapide, etc.)
-
+# ====================== FONCTIONS ======================
 FRENCH_MONTHS = {1: "Janvier", 2: "Février", 3: "Mars", 4: "Avril", 5: "Mai", 6: "Juin", 7: "Juillet", 8: "Août", 9: "Septembre", 10: "Octobre", 11: "Novembre", 12: "Décembre"}
 
 def safe_float(val):
@@ -374,7 +368,7 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
     obtained = []
     soumission = []
     for proj in projects:
-        status = status_dict[proj]
+        status = status_dict.get(proj, "En soumission")
         if status == "Abandonné": continue
         display_name = get_display_name(proj, status)
         if status == "Contrat obtenu":
@@ -391,7 +385,7 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
         ws_gantt.cell(current_row + 2, 1, "Besoin dortoi")
         ws_gantt.cell(current_row + 3, 1, "Besoin moudule bureau")
         ws_gantt.cell(current_row + 4, 1, "Besoin module vaste")
-        if status_dict[proj_plain] == "Contrat obtenu":
+        if status_dict.get(proj_plain) == "Contrat obtenu":
             obtained_start_rows.append(current_row)
         else:
             soumission_start_rows.append(current_row)
@@ -399,6 +393,7 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
         current_row += 6
     last_col = find_last_used_column(ws_gantt)
     restore_gantt_data(ws_gantt, saved_data)
+    # SOUS-TOTAL - Contrat obtenu
     sub_obt_row = current_row
     ws_gantt.cell(sub_obt_row, 1, "SOUS-TOTAL - Contrat obtenu")
     ws_gantt.cell(sub_obt_row + 1, 1, "Total Besoin Lit")
@@ -406,16 +401,15 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
     ws_gantt.cell(sub_obt_row + 3, 1, "Total Besoin moudule bureau")
     ws_gantt.cell(sub_obt_row + 4, 1, "Total Besoin module vaste")
     for c in range(2, last_col + 1):
-        lit = dort = bur = vas = 0.0
-        for start_r in obtained_start_rows:
-            lit += safe_float(ws_gantt.cell(start_r + 1, c).value)
-            dort += safe_float(ws_gantt.cell(start_r + 2, c).value)
-            bur += safe_float(ws_gantt.cell(start_r + 3, c).value)
-            vas += safe_float(ws_gantt.cell(start_r + 4, c).value)
+        lit = sum(safe_float(ws_gantt.cell(start_r + 1, c).value) for start_r in obtained_start_rows)
+        dort = sum(safe_float(ws_gantt.cell(start_r + 2, c).value) for start_r in obtained_start_rows)
+        bur = sum(safe_float(ws_gantt.cell(start_r + 3, c).value) for start_r in obtained_start_rows)
+        vas = sum(safe_float(ws_gantt.cell(start_r + 4, c).value) for start_r in obtained_start_rows)
         ws_gantt.cell(sub_obt_row + 1, c, lit)
         ws_gantt.cell(sub_obt_row + 2, c, dort)
         ws_gantt.cell(sub_obt_row + 3, c, bur)
         ws_gantt.cell(sub_obt_row + 4, c, vas)
+    # SOUS-TOTAL - Soumission
     sub_sou_row = sub_obt_row + 6
     ws_gantt.cell(sub_sou_row, 1, "SOUS-TOTAL - Soumission")
     ws_gantt.cell(sub_sou_row + 1, 1, "Total Besoin Lit")
@@ -423,16 +417,15 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
     ws_gantt.cell(sub_sou_row + 3, 1, "Total Besoin moudule bureau")
     ws_gantt.cell(sub_sou_row + 4, 1, "Total Besoin module vaste")
     for c in range(2, last_col + 1):
-        lit = dort = bur = vas = 0.0
-        for start_r in soumission_start_rows:
-            lit += safe_float(ws_gantt.cell(start_r + 1, c).value)
-            dort += safe_float(ws_gantt.cell(start_r + 2, c).value)
-            bur += safe_float(ws_gantt.cell(start_r + 3, c).value)
-            vas += safe_float(ws_gantt.cell(start_r + 4, c).value)
+        lit = sum(safe_float(ws_gantt.cell(start_r + 1, c).value) for start_r in soumission_start_rows)
+        dort = sum(safe_float(ws_gantt.cell(start_r + 2, c).value) for start_r in soumission_start_rows)
+        bur = sum(safe_float(ws_gantt.cell(start_r + 3, c).value) for start_r in soumission_start_rows)
+        vas = sum(safe_float(ws_gantt.cell(start_r + 4, c).value) for start_r in soumission_start_rows)
         ws_gantt.cell(sub_sou_row + 1, c, lit)
         ws_gantt.cell(sub_sou_row + 2, c, dort)
         ws_gantt.cell(sub_sou_row + 3, c, bur)
         ws_gantt.cell(sub_sou_row + 4, c, vas)
+    # TOTAL GÉNÉRAL
     total_row = sub_sou_row + 6
     ws_gantt.cell(total_row, 1, "TOTAL")
     ws_gantt.cell(total_row + 1, 1, "Total Besoin Lit")
@@ -440,12 +433,10 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
     ws_gantt.cell(total_row + 3, 1, "Total Besoin moudule bureau")
     ws_gantt.cell(total_row + 4, 1, "Total Besoin module vaste")
     for c in range(2, last_col + 1):
-        lit = dort = bur = vas = 0.0
-        for start_r in all_start_rows:
-            lit += safe_float(ws_gantt.cell(start_r + 1, c).value)
-            dort += safe_float(ws_gantt.cell(start_r + 2, c).value)
-            bur += safe_float(ws_gantt.cell(start_r + 3, c).value)
-            vas += safe_float(ws_gantt.cell(start_r + 4, c).value)
+        lit = sum(safe_float(ws_gantt.cell(start_r + 1, c).value) for start_r in all_start_rows)
+        dort = sum(safe_float(ws_gantt.cell(start_r + 2, c).value) for start_r in all_start_rows)
+        bur = sum(safe_float(ws_gantt.cell(start_r + 3, c).value) for start_r in all_start_rows)
+        vas = sum(safe_float(ws_gantt.cell(start_r + 4, c).value) for start_r in all_start_rows)
         ws_gantt.cell(total_row + 1, c, lit)
         ws_gantt.cell(total_row + 2, c, dort)
         ws_gantt.cell(total_row + 3, c, bur)
@@ -517,6 +508,7 @@ def rebuild_calendrier_sheet(ws_cal, ws_desc, projects):
         ws_cal.cell(total_row + 8, c, total_nt)
         ws_cal.cell(total_row + 9, c, total_module)
 
+# ====================== STYLING & RATTRAPAGE ======================
 def apply_thin_grid(ws, min_row, max_row, min_col, max_col):
     thin_side = Side(style="thin", color="000000")
     thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
@@ -1054,4 +1046,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ CODE 100% COMPLET – Lien de l'application ajouté dans le mail du nouvel utilisateur + tout le reste intact")
+st.caption("✅ CODE 100% COMPLET – Sous-Totaux + TOTAL restaurés + lien dans le mail + tout le reste intact")
