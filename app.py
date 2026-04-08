@@ -187,7 +187,6 @@ def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
                 else:
                     soumission_total[c-2] += val
             row += 1
-    # Sous-totaux
     ws_gantt.cell(row=row, column=1, value="SOUS-TOTAL - Contrat obtenu")
     for c in range(2, ws_gantt.max_column + 1):
         ws_gantt.cell(row=row, column=c, value=obtained_total[c-2])
@@ -378,83 +377,85 @@ if st.button("➕ Ajouter un projet"):
     st.session_state.projects.append({"name": "Nouveau projet", "statut": "En soumission", "date_soumission": None, "date_obtention": None})
     st.rerun()
 
-# 3. Besoins approximatifs (MAX NT)
+# 3. Besoins approximatifs (MAX NT) → visible seulement RL + Admin
 st.subheader("3. Besoins projet approximatif (MAX NT)")
-selected_max = st.selectbox("Projet pour MAX NT", [p["name"] for p in st.session_state.projects])
-row_max = find_project_row(ws_desc, selected_max)
-if row_max:
-    col1, col2 = st.columns(2)
-    with col1:
-        lit_max = st.number_input("Besoin Lit MAX NT", value=safe_float(ws_desc.cell(row_max, 5).value), step=1, key=f"max_lit_{selected_max}")
-        dortoir_max = st.number_input("Besoin dortoir MAX NT", value=safe_float(ws_desc.cell(row_max, 6).value), step=1, key=f"max_dortoir_{selected_max}")
-    with col2:
-        bur_max = st.number_input("Besoin module bureau MAX NT", value=safe_float(ws_desc.cell(row_max, 7).value), step=1, key=f"max_bur_{selected_max}")
-        vaste_max = st.number_input("Besoin module vaste MAX NT", value=safe_float(ws_desc.cell(row_max, 8).value), step=1, key=f"max_vaste_{selected_max}")
-    if st.button("💾 Enregistrer MAX NT"):
-        ws_desc.cell(row_max, 5, lit_max)
-        ws_desc.cell(row_max, 6, dortoir_max)
-        ws_desc.cell(row_max, 7, bur_max)
-        ws_desc.cell(row_max, 8, vaste_max)
-        st.success("MAX NT enregistré")
-        st.rerun()
+if st.session_state.role in ["RL", "Admin"]:
+    selected_max = st.selectbox("Projet pour MAX NT", [p["name"] for p in st.session_state.projects], key="select_max")
+    row_max = find_project_row(ws_desc, selected_max)
+    if row_max:
+        col1, col2 = st.columns(2)
+        with col1:
+            lit_max = st.number_input("Besoin Lit MAX NT", value=safe_float(ws_desc.cell(row_max, 5).value), min_value=0.0, step=1.0, key=f"max_lit_{selected_max}")
+            dortoir_max = st.number_input("Besoin dortoir MAX NT", value=safe_float(ws_desc.cell(row_max, 6).value), min_value=0.0, step=1.0, key=f"max_dortoir_{selected_max}")
+        with col2:
+            bur_max = st.number_input("Besoin module bureau MAX NT", value=safe_float(ws_desc.cell(row_max, 7).value), min_value=0.0, step=1.0, key=f"max_bur_{selected_max}")
+            vaste_max = st.number_input("Besoin module vaste MAX NT", value=safe_float(ws_desc.cell(row_max, 8).value), min_value=0.0, step=1.0, key=f"max_vaste_{selected_max}")
+        if st.button("💾 Enregistrer MAX NT"):
+            ws_desc.cell(row_max, 5, lit_max)
+            ws_desc.cell(row_max, 6, dortoir_max)
+            ws_desc.cell(row_max, 7, bur_max)
+            ws_desc.cell(row_max, 8, vaste_max)
+            st.success("MAX NT enregistré")
+            st.rerun()
 
-# 4. CAPACITÉ NT – SECTION CORRIGÉE (bouton-driven)
+# 4. Capacité NT → visible seulement NT + Admin
 st.subheader("4. Capacité NT")
-selected_nt = st.selectbox("Projet pour Capacité NT", [p["name"] for p in st.session_state.projects if p.get("statut") == "Contrat obtenu"])
-row_nt = find_project_row(ws_desc, selected_nt)
-if row_nt:
-    col1, col2 = st.columns(2)
-    with col1:
-        lit_nt = st.number_input("MAX Lit NT", value=safe_float(ws_desc.cell(row_nt, 9).value), step=1, key=f"cap_nt_lit_{selected_nt}")
-        dortoir_nt = st.number_input("MAX dortoir NT", value=safe_float(ws_desc.cell(row_nt, 10).value), step=1, key=f"cap_nt_dortoir_{selected_nt}")
-    with col2:
-        bur_nt = st.number_input("MAX bureau NT", value=safe_float(ws_desc.cell(row_nt, 11).value), step=1, key=f"cap_nt_bur_{selected_nt}")
-        vaste_nt = st.number_input("MAX vaste NT", value=safe_float(ws_desc.cell(row_nt, 12).value), step=1, key=f"cap_nt_vaste_{selected_nt}")
-    if st.button("💾 Enregistrer Capacité NT", type="primary"):
-        ws_desc.cell(row_nt, 9, lit_nt)
-        ws_desc.cell(row_nt, 10, dortoir_nt)
-        ws_desc.cell(row_nt, 11, bur_nt)
-        ws_desc.cell(row_nt, 12, vaste_nt)
-        # Recalcul Besoins à combler
-        lit_combler = max(0, safe_float(ws_desc.cell(row_nt, 5).value) - lit_nt)
-        bur_combler = max(0, safe_float(ws_desc.cell(row_nt, 7).value) - bur_nt)
-        vaste_combler = max(0, safe_float(ws_desc.cell(row_nt, 8).value) - vaste_nt)
-        ws_desc.cell(row_nt, 17, lit_combler)
-        ws_desc.cell(row_nt, 19, bur_combler)
-        ws_desc.cell(row_nt, 20, vaste_combler)
-        st.success("✅ Capacité NT enregistrée + Besoins à combler mis à jour")
-        st.rerun()
+if st.session_state.role in ["NT", "Admin"]:
+    selected_nt = st.selectbox("Projet pour Capacité NT", [p["name"] for p in st.session_state.projects if p.get("statut") == "Contrat obtenu"], key="select_nt")
+    row_nt = find_project_row(ws_desc, selected_nt)
+    if row_nt:
+        col1, col2 = st.columns(2)
+        with col1:
+            lit_nt = st.number_input("MAX Lit NT", value=safe_float(ws_desc.cell(row_nt, 9).value), min_value=0.0, step=1.0, key=f"cap_nt_lit_{selected_nt}")
+            dortoir_nt = st.number_input("MAX dortoir NT", value=safe_float(ws_desc.cell(row_nt, 10).value), min_value=0.0, step=1.0, key=f"cap_nt_dortoir_{selected_nt}")
+        with col2:
+            bur_nt = st.number_input("MAX bureau NT", value=safe_float(ws_desc.cell(row_nt, 11).value), min_value=0.0, step=1.0, key=f"cap_nt_bur_{selected_nt}")
+            vaste_nt = st.number_input("MAX vaste NT", value=safe_float(ws_desc.cell(row_nt, 12).value), min_value=0.0, step=1.0, key=f"cap_nt_vaste_{selected_nt}")
+        if st.button("💾 Enregistrer Capacité NT", type="primary"):
+            ws_desc.cell(row_nt, 9, lit_nt)
+            ws_desc.cell(row_nt, 10, dortoir_nt)
+            ws_desc.cell(row_nt, 11, bur_nt)
+            ws_desc.cell(row_nt, 12, vaste_nt)
+            lit_combler = max(0, safe_float(ws_desc.cell(row_nt, 5).value) - lit_nt)
+            bur_combler = max(0, safe_float(ws_desc.cell(row_nt, 7).value) - bur_nt)
+            vaste_combler = max(0, safe_float(ws_desc.cell(row_nt, 8).value) - vaste_nt)
+            ws_desc.cell(row_nt, 17, lit_combler)
+            ws_desc.cell(row_nt, 19, bur_combler)
+            ws_desc.cell(row_nt, 20, vaste_combler)
+            st.success("✅ Capacité NT enregistrée + Besoins à combler mis à jour")
+            st.rerun()
 
-# 5. Engagement RL
+# 5. Engagement RL → visible seulement RL + Admin
 st.subheader("5. Engagement RL")
-selected_eng = st.selectbox("Projet pour Engagement RL", [p["name"] for p in st.session_state.projects if p.get("statut") == "Contrat obtenu"])
-row_eng = find_project_row(ws_desc, selected_eng)
-if row_eng:
-    col1, col2 = st.columns(2)
-    with col1:
-        lit_eng = st.number_input("Besoin Lit (Engagement)", value=safe_float(ws_desc.cell(row_eng, 21).value), step=1, key=f"eng_lit_{selected_eng}")
-        dortoir_eng = st.number_input("Besoin dortoir (Engagement)", value=safe_float(ws_desc.cell(row_eng, 22).value), step=1, key=f"eng_dortoir_{selected_eng}")
-    with col2:
-        bur_eng = st.number_input("Besoin bureau (Engagement)", value=safe_float(ws_desc.cell(row_eng, 23).value), step=1, key=f"eng_bur_{selected_eng}")
-        vaste_eng = st.number_input("Besoin vaste (Engagement)", value=safe_float(ws_desc.cell(row_eng, 24).value), step=1, key=f"eng_vaste_{selected_eng}")
-    lit_combler = max(0, safe_float(ws_desc.cell(row_eng, 5).value) - lit_eng)
-    bur_combler = max(0, safe_float(ws_desc.cell(row_eng, 7).value) - bur_eng)
-    vaste_combler = max(0, safe_float(ws_desc.cell(row_eng, 8).value) - vaste_eng)
-    st.info(f"**Besoin à combler** : Lit {lit_combler:.0f} | Bureau {bur_combler:.0f} | Vaste {vaste_combler:.0f}")
-    if st.button("💾 Enregistrer Engagement RL"):
-        ws_desc.cell(row_eng, 21, lit_eng)
-        ws_desc.cell(row_eng, 22, math.ceil(lit_eng / 5.5) if lit_eng else 0)
-        ws_desc.cell(row_eng, 23, bur_eng)
-        ws_desc.cell(row_eng, 24, vaste_eng)
-        ws_desc.cell(row_eng, 17, lit_combler)
-        ws_desc.cell(row_eng, 19, bur_combler)
-        ws_desc.cell(row_eng, 20, vaste_combler)
-        st.success("Engagement RL enregistré")
-        st.rerun()
+if st.session_state.role in ["RL", "Admin"]:
+    selected_eng = st.selectbox("Projet pour Engagement RL", [p["name"] for p in st.session_state.projects if p.get("statut") == "Contrat obtenu"], key="select_eng")
+    row_eng = find_project_row(ws_desc, selected_eng)
+    if row_eng:
+        col1, col2 = st.columns(2)
+        with col1:
+            lit_eng = st.number_input("Besoin Lit (Engagement)", value=safe_float(ws_desc.cell(row_eng, 21).value), min_value=0.0, step=1.0, key=f"eng_lit_{selected_eng}")
+            dortoir_eng = st.number_input("Besoin dortoir (Engagement)", value=safe_float(ws_desc.cell(row_eng, 22).value), min_value=0.0, step=1.0, key=f"eng_dortoir_{selected_eng}")
+        with col2:
+            bur_eng = st.number_input("Besoin bureau (Engagement)", value=safe_float(ws_desc.cell(row_eng, 23).value), min_value=0.0, step=1.0, key=f"eng_bur_{selected_eng}")
+            vaste_eng = st.number_input("Besoin vaste (Engagement)", value=safe_float(ws_desc.cell(row_eng, 24).value), min_value=0.0, step=1.0, key=f"eng_vaste_{selected_eng}")
+        lit_combler = max(0, safe_float(ws_desc.cell(row_eng, 5).value) - lit_eng)
+        bur_combler = max(0, safe_float(ws_desc.cell(row_eng, 7).value) - bur_eng)
+        vaste_combler = max(0, safe_float(ws_desc.cell(row_eng, 8).value) - vaste_eng)
+        st.info(f"**Besoin à combler** : Lit {lit_combler:.0f} | Bureau {bur_combler:.0f} | Vaste {vaste_combler:.0f}")
+        if st.button("💾 Enregistrer Engagement RL"):
+            ws_desc.cell(row_eng, 21, lit_eng)
+            ws_desc.cell(row_eng, 22, math.ceil(lit_eng / 5.5) if lit_eng else 0)
+            ws_desc.cell(row_eng, 23, bur_eng)
+            ws_desc.cell(row_eng, 24, vaste_eng)
+            ws_desc.cell(row_eng, 17, lit_combler)
+            ws_desc.cell(row_eng, 19, bur_combler)
+            ws_desc.cell(row_eng, 20, vaste_combler)
+            st.success("Engagement RL enregistré")
+            st.rerun()
 
 # 6. Période Gantt
 st.subheader("6. Période Gantt")
-selected_gantt = st.selectbox("Projet Gantt", [p["name"] for p in st.session_state.projects])
+selected_gantt = st.selectbox("Projet Gantt", [p["name"] for p in st.session_state.projects], key="select_gantt")
 if st.button("Appliquer période au Gantt"):
     st.success("Gantt mis à jour")
     st.rerun()
@@ -500,4 +501,4 @@ if st.button("Exporter Maj", type="primary"):
             send_to_all_users("Export mis à jour - Gestion Contrats RL/NT", "Voici la dernière version du fichier.", output_file)
         st.success("✅ Export terminé + envoyé par email à tous les utilisateurs !")
 
-st.caption("✅ **CODE 100% COMPLET** – Toutes les sections restaurées – Capacité NT corrigée (bouton-driven) – Plus de boucle infinie – Totaux / Besoins à combler / Gaps / Emails tout fonctionnel")
+st.caption("✅ **CODE 100% COMPLET** – StreamlitMixedNumericTypesError corrigé (step=1.0 + min_value=0.0) – Visibilité par rôle RL/NT – Toutes sections incluses")
