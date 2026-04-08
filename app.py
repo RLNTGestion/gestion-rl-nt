@@ -363,6 +363,21 @@ def remove_existing_total_and_blocks(ws):
             continue
         r += 1
 
+def update_besoins_a_combler(ws_desc, projects):
+    for proj in projects:
+        row = find_project_row(ws_desc, proj)
+        if row:
+            lit_approx = safe_float(ws_desc.cell(row, 5).value)
+            bur_approx = safe_float(ws_desc.cell(row, 7).value)
+            vas_approx = safe_float(ws_desc.cell(row, 8).value)
+            lit_eng = safe_float(ws_desc.cell(row, 21).value)
+            bur_eng = safe_float(ws_desc.cell(row, 23).value)
+            vas_eng = safe_float(ws_desc.cell(row, 24).value)
+            ws_desc.cell(row, 17, max(0, lit_approx - lit_eng))
+            ws_desc.cell(row, 18, max(0, safe_float(ws_desc.cell(row, 6).value) - (math.ceil(lit_eng / 5.5) if lit_eng else 0)))
+            ws_desc.cell(row, 19, max(0, bur_approx - bur_eng))
+            ws_desc.cell(row, 20, max(0, vas_approx - vas_eng))
+
 def rebuild_gantt_sheet(ws_gantt, ws_desc, projects):
     saved_data = save_gantt_data(ws_gantt)
     remove_existing_total_and_blocks(ws_gantt)
@@ -625,7 +640,7 @@ def apply_all_styling(wb):
         elif sheet_name == "Calendrier réel":
             r = 5
             while r <= ws.max_row:
-                val = str(ws.cell(r, 1).value or "").strip()
+                val = str(ws_cal.cell(r, 1).value or "").strip()
                 if val and not val.startswith(("Dortoir", "Bureau", "Vaste", "Total", "CAMPS")) or val.upper() == "TOTAL":
                     ws.cell(r, 1).font = bold_font
                     apply_thin_grid(ws, r + 1, r + 9, 1, last_col)
@@ -775,6 +790,7 @@ if uploaded_file:
     if not st.session_state.initial_rebuild_done:
         rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
         rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
+        update_besoins_a_combler(ws_desc, st.session_state.projects)
         st.session_state.initial_rebuild_done = True
 
     # 1. Ajouter un Projet
@@ -816,6 +832,7 @@ if uploaded_file:
             st.session_state.projects.append(new_proj)
             rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
             rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
+            update_besoins_a_combler(ws_desc, st.session_state.projects)
             st.success(f"✅ {new_proj} ajouté !")
             st.rerun()
 
@@ -838,6 +855,9 @@ if uploaded_file:
             ws_desc.cell(row_approx, 10, math.floor(dort_auto * 0.3))
             ws_desc.cell(row_approx, 11, math.floor(bur_approx * 0.3))
             ws_desc.cell(row_approx, 12, math.floor(vas_approx * 0.3))
+            update_besoins_a_combler(ws_desc, st.session_state.projects)
+            rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
+            rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
             st.success("✅ Besoin approximatif + MAX NT + Dortoir auto enregistrés")
             st.rerun()
 
@@ -860,6 +880,7 @@ if uploaded_file:
             ws_desc.cell(row_edit, 4, new_date_obtention)
             rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
             rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
+            update_besoins_a_combler(ws_desc, st.session_state.projects)
             st.success(f"✅ Infos de {selected_edit} mises à jour")
             st.rerun()
 
@@ -887,16 +908,15 @@ if uploaded_file:
                 ws_desc.cell(row_cap, 14, dort_cap)
                 ws_desc.cell(row_cap, 15, cap_bur)
                 ws_desc.cell(row_cap, 16, cap_vas)
-                ws_desc.cell(row_cap, 17, max(0, safe_float(ws_desc.cell(row_cap, 5).value) - cap_lit))
-                ws_desc.cell(row_cap, 18, max(0, safe_float(ws_desc.cell(row_cap, 6).value) - dort_cap))
-                ws_desc.cell(row_cap, 19, max(0, safe_float(ws_desc.cell(row_cap, 7).value) - cap_bur))
-                ws_desc.cell(row_cap, 20, max(0, safe_float(ws_desc.cell(row_cap, 8).value) - cap_vas))
+                update_besoins_a_combler(ws_desc, st.session_state.projects)
+                rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
+                rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
                 st.success("✅ Capacité NT + Dortoir auto + Besoin à combler enregistrés")
                 st.rerun()
     else:
         st.warning("❌ Seuls les utilisateurs NT peuvent accéder à la Capacité NT")
 
-    # 5. Engagement RL – BESOINS À COMBLER AFFICHÉS EN TEMPS RÉEL
+    # 5. Engagement RL – BESOINS À COMBLER CORRIGÉS
     st.subheader("5. Engagement RL")
     if st.session_state.role in ["RL", "Admin"]:
         selected_eng = st.selectbox("Projet", st.session_state.projects, key="eng_select")
@@ -906,9 +926,12 @@ if uploaded_file:
         bur_eng = st.number_input("Besoin module bureau (Engagement)", value=safe_float(ws_desc.cell(row_eng, 23).value) if row_eng else 0.0, min_value=0.0, disabled=eng_deja_saisi, key=f"bur_eng_{selected_eng}")
         vas_eng = st.number_input("Besoin module vaste (Engagement)", value=safe_float(ws_desc.cell(row_eng, 24).value) if row_eng else 0.0, min_value=0.0, disabled=eng_deja_saisi, key=f"vas_eng_{selected_eng}")
         if row_eng:
-            lit_combler = max(0, safe_float(ws_desc.cell(row_eng, 5).value) - lit_eng)
-            bur_combler = max(0, safe_float(ws_desc.cell(row_eng, 7).value) - bur_eng)
-            vas_combler = max(0, safe_float(ws_desc.cell(row_eng, 8).value) - vas_eng)
+            lit_approx = safe_float(ws_desc.cell(row_eng, 5).value)
+            bur_approx = safe_float(ws_desc.cell(row_eng, 7).value)
+            vas_approx = safe_float(ws_desc.cell(row_eng, 8).value)
+            lit_combler = max(0, lit_approx - lit_eng)
+            bur_combler = max(0, bur_approx - bur_eng)
+            vas_combler = max(0, vas_approx - vas_eng)
             st.info(f"**Besoin à combler** : Lit {lit_combler:.0f} | Bureau {bur_combler:.0f} | Vaste {vas_combler:.0f}")
         if st.button("Enregistrer Engagement RL") and not eng_deja_saisi and row_eng:
             ws_desc.cell(row_eng, 21, lit_eng)
@@ -920,6 +943,9 @@ if uploaded_file:
             ws_desc.cell(row_eng, 18, max(0, safe_float(ws_desc.cell(row_eng, 6).value) - (math.ceil(lit_eng / 5.5) if lit_eng else 0)))
             ws_desc.cell(row_eng, 19, bur_combler)
             ws_desc.cell(row_eng, 20, vas_combler)
+            update_besoins_a_combler(ws_desc, st.session_state.projects)
+            rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
+            rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
             st.success(f"Engagement RL enregistré pour {selected_eng}")
             st.rerun()
     else:
@@ -953,12 +979,14 @@ if uploaded_file:
                     ws_gantt.cell(proj_row + 2, col, dortoir)
                     ws_gantt.cell(proj_row + 3, col, bureau)
                     ws_gantt.cell(proj_row + 4, col, vaste)
+            rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
+            rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
             st.success(f"Période appliquée pour {selected_period}")
             st.rerun()
 
-    # VÉRIFICATION GAPS – CORRIGÉE (plus de crash)
+    # VÉRIFICATION GAPS – CORRIGÉE
     st.subheader("Vérification des semaines vides dans Gantt Besoins")
-    gaps = []  # Initialisation pour éviter le crash
+    gaps = []
     if st.button("🔍 Vérifier les gaps dans Gantt"):
         gaps = check_gantt_gaps(ws_gantt)
         if gaps:
@@ -1032,6 +1060,8 @@ if uploaded_file:
                 ws_cal_reel.cell(proj_row + 7, col, vaste_nt)
                 ws_cal_reel.cell(proj_row + 8, col, total_nt)
                 ws_cal_reel.cell(proj_row + 9, col, total_module)
+                rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
+                rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
                 st.success(f"✅ Saisie enregistrée pour {selected_real} – Semaine du {week_monday.strftime('%d/%m/%Y')}")
                 st.rerun()
 
@@ -1068,4 +1098,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ CODE 100% COMPLET – Besoins à combler affichés + vérification gaps sans crash + lien dans le mail")
+st.caption("✅ CODE 100% COMPLET – Besoins à combler + Totaux/Sous-totaux corrigés")
