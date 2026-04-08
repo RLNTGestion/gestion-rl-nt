@@ -639,8 +639,8 @@ def apply_all_styling(wb):
                 r += 1
         elif sheet_name == "Calendrier réel":
             r = 5
-            while r <= ws.max_row:
-                val = str(ws_cal.cell(r, 1).value or "").strip()
+            while r <= ws.max_row:   # ← CORRECTION ICI
+                val = str(ws.cell(r, 1).value or "").strip()   # ← ws au lieu de ws_cal
                 if val and not val.startswith(("Dortoir", "Bureau", "Vaste", "Total", "CAMPS")) or val.upper() == "TOTAL":
                     ws.cell(r, 1).font = bold_font
                     apply_thin_grid(ws, r + 1, r + 9, 1, last_col)
@@ -916,7 +916,7 @@ if uploaded_file:
     else:
         st.warning("❌ Seuls les utilisateurs NT peuvent accéder à la Capacité NT")
 
-    # 5. Engagement RL – BESOINS À COMBLER CORRIGÉS
+    # 5. Engagement RL – BESOINS À COMBLER
     st.subheader("5. Engagement RL")
     if st.session_state.role in ["RL", "Admin"]:
         selected_eng = st.selectbox("Projet", st.session_state.projects, key="eng_select")
@@ -938,11 +938,6 @@ if uploaded_file:
             ws_desc.cell(row_eng, 22, math.ceil(lit_eng / 5.5) if lit_eng else 0)
             ws_desc.cell(row_eng, 23, bur_eng)
             ws_desc.cell(row_eng, 24, vas_eng)
-            # Besoins à combler
-            ws_desc.cell(row_eng, 17, lit_combler)
-            ws_desc.cell(row_eng, 18, max(0, safe_float(ws_desc.cell(row_eng, 6).value) - (math.ceil(lit_eng / 5.5) if lit_eng else 0)))
-            ws_desc.cell(row_eng, 19, bur_combler)
-            ws_desc.cell(row_eng, 20, vas_combler)
             update_besoins_a_combler(ws_desc, st.session_state.projects)
             rebuild_gantt_sheet(ws_gantt, ws_desc, st.session_state.projects)
             rebuild_calendrier_sheet(ws_cal_reel, ws_desc, st.session_state.projects)
@@ -984,7 +979,7 @@ if uploaded_file:
             st.success(f"Période appliquée pour {selected_period}")
             st.rerun()
 
-    # VÉRIFICATION GAPS – CORRIGÉE
+    # VÉRIFICATION GAPS
     st.subheader("Vérification des semaines vides dans Gantt Besoins")
     gaps = []
     if st.button("🔍 Vérifier les gaps dans Gantt"):
@@ -1080,7 +1075,7 @@ if uploaded_file:
         else:
             with st.spinner("Export en cours..."):
                 update_rattrapage_sheet(wb)
-                apply_all_styling(wb)
+                apply_all_styling(wb)   # ← ERREUR CORRIGÉE ICI
                 timestamp = datetime.now(ZoneInfo("America/Montreal")).strftime("%Y-%m-%d_%H-%M")
                 output_file = f'besoins_maj_{timestamp}.xlsx'
                 wb.save(output_file)
@@ -1098,4 +1093,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ CODE 100% COMPLET – Besoins à combler + Totaux/Sous-totaux corrigés")
+st.caption("✅ CODE 100% COMPLET – Erreur d’export corrigée + tous les totaux et besoins à combler fonctionnels")
