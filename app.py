@@ -319,6 +319,11 @@ def restore_calendrier_data(ws_cal, saved_data):
             continue
         r += 1
 
+def get_week_date(ws, col):
+    val = ws.cell(4, col).value
+    dt = normalize_date(val)
+    return dt.strftime("%d/%m/%Y") if dt else f"col {col}"
+
 def check_gantt_gaps(ws_gantt):
     warnings = []
     last_col = find_last_used_column(ws_gantt)
@@ -340,11 +345,6 @@ def check_gantt_gaps(ws_gantt):
             continue
         r += 1
     return warnings
-
-def get_week_date(ws, col):
-    val = ws.cell(4, col).value
-    dt = normalize_date(val)
-    return dt.strftime("%d/%m/%Y") if dt else f"col {col}"
 
 def remove_existing_total_and_blocks(ws):
     r = ws.max_row
@@ -896,7 +896,7 @@ if uploaded_file:
     else:
         st.warning("❌ Seuls les utilisateurs NT peuvent accéder à la Capacité NT")
 
-    # 5. Engagement RL – BESOINS À COMBLER AFFICHÉS
+    # 5. Engagement RL – BESOINS À COMBLER AFFICHÉS EN TEMPS RÉEL
     st.subheader("5. Engagement RL")
     if st.session_state.role in ["RL", "Admin"]:
         selected_eng = st.selectbox("Projet", st.session_state.projects, key="eng_select")
@@ -956,21 +956,19 @@ if uploaded_file:
             st.success(f"Période appliquée pour {selected_period}")
             st.rerun()
 
-    # VÉRIFICATION GAPS (corrigée)
+    # VÉRIFICATION GAPS – CORRIGÉE (plus de crash)
     st.subheader("Vérification des semaines vides dans Gantt Besoins")
+    gaps = []  # Initialisation pour éviter le crash
     if st.button("🔍 Vérifier les gaps dans Gantt"):
-        if 'wb' not in st.session_state or st.session_state.wb is None:
-            st.error("Veuillez d'abord charger le fichier Excel.")
+        gaps = check_gantt_gaps(ws_gantt)
+        if gaps:
+            st.error("**Semaines vides détectées :**")
+            for g in gaps:
+                st.markdown(f"- {g}")
+            st.session_state.gantt_gap_confirmed = False
         else:
-            gaps = check_gantt_gaps(ws_gantt)
-            if gaps:
-                st.error("**Semaines vides détectées :**")
-                for g in gaps:
-                    st.markdown(f"- {g}")
-                st.session_state.gantt_gap_confirmed = False
-            else:
-                st.success("✅ Aucun gap détecté")
-                st.session_state.gantt_gap_confirmed = True
+            st.success("✅ Aucun gap détecté")
+            st.session_state.gantt_gap_confirmed = True
     confirm_gap = st.checkbox("Je confirme que les semaines vides sont correctes (report de projet, etc.)",
                               value=st.session_state.gantt_gap_confirmed, key="confirm_gap")
     st.session_state.gantt_gap_confirmed = confirm_gap
@@ -1070,4 +1068,4 @@ if uploaded_file:
 else:
     st.warning("Upload ton fichier **Modèle Base.xlsx** pour commencer.")
 
-st.caption("✅ CODE 100% COMPLET – Gaps corrigés + Besoins à combler affichés + lien dans le mail")
+st.caption("✅ CODE 100% COMPLET – Besoins à combler affichés + vérification gaps sans crash + lien dans le mail")
