@@ -1,0 +1,12 @@
+{
+  "rlnt.gestion@gmail.com": {
+    "password": "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9",
+    "role": "Admin",
+    "name": "Administrateur Principal"
+  },
+  "jdallaire@locationrl.com": {
+    "password": "c145715d344c3a1ce944a605d8224c0420025c0c2d9c60900531da781326eba8",
+    "role": "RL",
+    "name": "Jo Dal"
+  }
+}
