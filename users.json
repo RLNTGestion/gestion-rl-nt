@@ -5,13 +5,8 @@
     "name": "Administrateur Principal"
   },
   "jdallaire@locationrl.com": {
-    "password": "c145715d344c3a1ce944a605d8224c0420025c0c2d9c60900531da781326eba8",
-    "role": "RL",
-    "name": "Jo Dal"
-  },
-  "dallaire23@gmail.com": {
-    "password": "ecd71870d1963316a97e3ac3408c9835ad8cf0f3c1bc703527c30265534f75ae",
-    "role": "NT",
-    "name": "TEST"
+    "password": "30c0434a0bf62faf1503dcf95cc6ddf3cbca05188d607e5198e1ef3636d57fe4",
+    "role": "Admin",
+    "name": "Jonathan Dallaire"
   }
 }
